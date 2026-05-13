@@ -177,7 +177,6 @@ export const ProjectCard = memo(function ProjectCard({ project, onClick, isDragO
                 entryIndex={i}
                 projectId={project.id}
                 projectTitle={project.title}
-                actionsHoverOnly
                 onLabelClick={onClick}
               />
             ))}

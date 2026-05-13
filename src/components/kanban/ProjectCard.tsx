@@ -45,8 +45,11 @@ export const ProjectCard = memo(function ProjectCard({ project, onClick, isDragO
   // Done items fade
   const isDone = project.status === 'done'
 
-  // Next pending task (first non-done, non-dropped)
-  const nextTask = project.tasks.find(t => t.status !== 'done' && t.status !== 'dropped')
+  // Next-up task: the active task that's been waiting longest (oldest createdAt)
+  // — surfaces what's most at risk of being neglected, not what was just added
+  const nextTask = project.tasks
+    .filter(t => t.status !== 'done' && t.status !== 'dropped')
+    .sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''))[0]
 
   const wrapperProps = isDragOverlay
     ? {}
@@ -167,8 +170,8 @@ export const ProjectCard = memo(function ProjectCard({ project, onClick, isDragO
           </div>
         )}
 
-        {/* Waiting entries */}
-        {waitingEntries.length > 0 && (
+        {/* Waiting entries — hidden on in_progress cards (shown on cross-listed card in Waiting column instead) */}
+        {waitingEntries.length > 0 && project.status !== 'in_progress' && (
           <div className="mt-2 flex flex-col -mx-1" onPointerDown={e => e.stopPropagation()}>
             {waitingEntries.map((entry, i) => (
               <WaitingEntryRow

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X, Check, Clock } from 'lucide-react'
+import { X, Check, Clock, CheckCircle2 } from 'lucide-react'
 import { normalizeWaitingOn } from '../../lib/utils'
 import { WaitingBadge } from '../ui/WaitingBadge'
 import { WaitingOnForm } from '../ui/WaitingOnForm'
@@ -114,7 +114,17 @@ export function ProjectModalWaiting({ project, updateProject }: ProjectModalWait
                     <WaitingBadge since={entry.since} shape="rounded-full" />
                     <button
                       onClick={() => handleRemoveWaiting(index)}
-                      className="opacity-0 group-hover:opacity-60 hover:!opacity-100 text-stone transition-all p-0.5"
+                      title="Got it — they delivered"
+                      className="opacity-0 group-hover:opacity-60 hover:!opacity-100
+                        text-stone hover:!text-emerald-600 transition-all p-0.5"
+                    >
+                      <CheckCircle2 size={14} />
+                    </button>
+                    <button
+                      onClick={() => handleRemoveWaiting(index)}
+                      title="Remove"
+                      className="opacity-0 group-hover:opacity-60 hover:!opacity-100
+                        text-stone hover:!text-red-600 transition-all p-0.5"
                     >
                       <X size={14} />
                     </button>

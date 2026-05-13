@@ -35,26 +35,41 @@ function CrossListedCard({ project, onClick }: { project: Project; onClick: () =
 
   return (
     <div
-      onClick={onClick}
-      className="rounded-[8px] mb-2 border border-dashed border-border cursor-pointer
-        bg-card/60 hover:bg-card hover:border-stone/30 transition-all duration-150 overflow-hidden"
+      className="rounded-[10px] mb-3 border border-dashed border-border bg-card/70
+        hover:bg-card hover:border-stone/25 transition-all duration-150 overflow-hidden"
     >
-      <div className="px-3 py-2.5 flex items-start gap-2.5">
-        <div className="w-2 h-2 rounded-sm mt-1 flex-shrink-0" style={{ background: catConfig.bg, border: `1px solid ${catConfig.color}40` }} />
+      {/* Project header */}
+      <button
+        onClick={onClick}
+        className="w-full text-left px-4 pt-3 pb-2.5 flex items-start gap-3 cursor-pointer
+          hover:bg-card transition-colors"
+      >
+        <div
+          className="w-2 h-2 rounded-sm mt-1.5 flex-shrink-0"
+          style={{ background: catConfig.bg, border: `1px solid ${catConfig.color}40` }}
+        />
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[12px] font-medium text-charcoal/70 truncate">{project.title}</span>
-            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-500 border border-blue-100 whitespace-nowrap">
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] font-medium text-charcoal truncate">{project.title}</span>
+            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-500
+              border border-blue-100 whitespace-nowrap flex-shrink-0 uppercase tracking-wider">
               also active
             </span>
           </div>
           {activeTasks.length > 0 && (
-            <div className="mt-1 text-[10px] text-stone/40 truncate">{activeTasks[0].title}</div>
+            <div className="mt-1 text-[11px] text-stone/50 truncate">
+              {activeTasks[0].title}
+            </div>
           )}
         </div>
-      </div>
+      </button>
+
+      {/* Waiting entries */}
       {waitingEntries.length > 0 && (
-        <div className="px-3 pb-2 -mt-1" onPointerDown={e => e.stopPropagation()}>
+        <div
+          className="px-3 pb-2 border-t border-border/50 bg-canvas/30"
+          onPointerDown={e => e.stopPropagation()}
+        >
           {waitingEntries.map((entry, i) => (
             <WaitingEntryRow
               key={i}
@@ -62,7 +77,6 @@ function CrossListedCard({ project, onClick }: { project: Project; onClick: () =
               entryIndex={i}
               projectId={project.id}
               projectTitle={project.title}
-              actionsHoverOnly
               onLabelClick={onClick}
             />
           ))}

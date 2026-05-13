@@ -76,20 +76,22 @@ export function WaitingEntryRow({
 
   const actionVisibility = actionsHoverOnly
     ? 'opacity-0 group-hover:opacity-70 hover:!opacity-100'
-    : 'opacity-70 hover:opacity-100'
+    : 'opacity-60 hover:opacity-100'
 
   return (
-    <div className="flex items-center gap-2 py-1.5 group">
+    <div className="flex items-center gap-3 py-2 group">
       <button
         onClick={handleLabelClick}
         className="flex-1 min-w-0 text-left flex items-center gap-2 cursor-pointer"
       >
         {showProject && (
-          <span className="text-[11px] text-stone/60 truncate max-w-[140px]">{projectTitle}</span>
+          <>
+            <span className="text-[11px] text-stone/55 truncate max-w-[160px]">{projectTitle}</span>
+            <span className="text-stone/25 text-[10px]">·</span>
+          </>
         )}
-        {showProject && <span className="text-stone/30 text-[10px]">·</span>}
-        <span className="text-[12px] text-charcoal truncate">{entry.person}</span>
-        <WaitingBadge since={entry.since} shape="rounded-full" />
+        <span className="text-[13px] text-charcoal truncate flex-1">{entry.person}</span>
+        <WaitingBadge since={entry.since} shape="rounded-full" variant="compact" />
       </button>
 
       <div className="flex items-center gap-0.5 flex-shrink-0">

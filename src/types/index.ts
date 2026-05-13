@@ -20,6 +20,7 @@ export interface RecurrenceRule {
 export interface WaitingOn {
   person: string
   since: string // ISO date
+  snoozedUntil?: string // ISO date — hide from follow-up panel until this date
 }
 
 export interface Project {
@@ -64,6 +65,7 @@ export interface Task {
   status: TaskStatus
   isRecurring: boolean
   recurrenceRule?: RecurrenceRule
+  taskType?: TaskType
   isUncomfortable: boolean
   fromEditor?: boolean  // true = created/managed by notes editor checkboxes
   bodyContent?: string  // BlockNote JSON — rich text notes for standalone tasks
@@ -184,6 +186,7 @@ export interface CalendarEvent {
 }
 
 export type Tier = 'deep' | 'short' | 'maintenance'
+export type TaskType = Tier | 'reminder'
 export type TierAssignment = Tier | 'unassigned'
 
 export interface AssignedCalendarEvent {

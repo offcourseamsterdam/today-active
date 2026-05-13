@@ -165,7 +165,6 @@ function SortableTaskRow({
   color,
   projectId,
   onToggle,
-  onToggleUncomfortable,
   onDelete,
   onRename,
 }: {
@@ -173,7 +172,6 @@ function SortableTaskRow({
   color: string
   projectId: string
   onToggle: () => void
-  onToggleUncomfortable: () => void
   onDelete: () => void
   onRename: (title: string) => void
 }) {
@@ -213,16 +211,6 @@ function SortableTaskRow({
         <InlineTitle value={task.title} isDone={task.status === 'done'} onSave={onRename} />
         <SubtaskChip task={task} expanded={expanded} onToggle={() => setExpanded(e => !e)} />
         <button
-          onClick={onToggleUncomfortable}
-          title={task.isUncomfortable ? 'Remove uncomfortable flag' : 'Mark as uncomfortable'}
-          className={`group/pill flex-shrink-0 flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full border transition-all
-            ${task.isUncomfortable
-              ? 'bg-amber-50 text-amber-600 border-amber-200'
-              : 'border-stone/20 text-stone/30 hover:border-stone/40 hover:text-stone/50'}`}
-        >
-          🔥<span className="max-w-0 overflow-hidden whitespace-nowrap transition-all duration-200 group-hover/pill:max-w-[80px]">&nbsp;uncomfortable</span>
-        </button>
-        <button
           onClick={onDelete}
           className="opacity-0 group-hover:opacity-60 hover:!opacity-100 text-stone hover:text-red transition-all"
         >
@@ -240,7 +228,6 @@ function DoneTaskRow({
   color,
   projectId,
   onToggle,
-  onToggleUncomfortable,
   onDelete,
   onRename,
 }: {
@@ -248,7 +235,6 @@ function DoneTaskRow({
   color: string
   projectId: string
   onToggle: () => void
-  onToggleUncomfortable: () => void
   onDelete: () => void
   onRename: (title: string) => void
 }) {
@@ -265,16 +251,6 @@ function DoneTaskRow({
         />
         <InlineTitle value={task.title} isDone onSave={onRename} />
         <SubtaskChip task={task} expanded={expanded} onToggle={() => setExpanded(e => !e)} />
-        <button
-          onClick={onToggleUncomfortable}
-          title={task.isUncomfortable ? 'Remove uncomfortable flag' : 'Mark as uncomfortable'}
-          className={`group/pill flex-shrink-0 flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full border transition-all
-            ${task.isUncomfortable
-              ? 'bg-amber-50 text-amber-600 border-amber-200'
-              : 'border-stone/20 text-stone/30 hover:border-stone/40 hover:text-stone/50'}`}
-        >
-          🔥<span className="max-w-0 overflow-hidden whitespace-nowrap transition-all duration-200 group-hover/pill:max-w-[80px]">&nbsp;uncomfortable</span>
-        </button>
         <button
           onClick={onDelete}
           className="opacity-0 group-hover:opacity-60 hover:!opacity-100 text-stone hover:text-red transition-all"
@@ -296,9 +272,16 @@ export function ProjectModalTasks({ project }: ProjectModalTasksProps) {
   const reorderProjectTasks = useStore(s => s.reorderProjectTasks)
 
   const [newTaskTitle, setNewTaskTitle] = useState('')
+  const [showAllDone, setShowAllDone] = useState(false)
+
+  const DONE_VISIBLE = 5
 
   const categoryConfig = CATEGORY_CONFIG[project.category]
-  const doneTasks = project.tasks.filter(t => t.status === 'done')
+  const doneTasks = useMemo(
+    () => [...project.tasks.filter(t => t.status === 'done')]
+      .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? '')),
+    [project.tasks]
+  )
   const activeTasks = project.tasks.filter(t => t.status !== 'done')
   const totalTasks = project.tasks.length
 
@@ -331,12 +314,6 @@ export function ProjectModalTasks({ project }: ProjectModalTasksProps) {
     }
   }
 
-  function handleToggleUncomfortable(taskId: string) {
-    const task = project.tasks.find(t => t.id === taskId)
-    if (!task) return
-    updateTask(taskId, project.id, { isUncomfortable: !task.isUncomfortable })
-  }
-
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (!over || active.id === over.id) return
@@ -363,9 +340,22 @@ export function ProjectModalTasks({ project }: ProjectModalTasksProps) {
         )}
       </div>
 
+      {/* Add task form — at top so new tasks build downward */}
+      <form onSubmit={handleAddTask} className="mb-2 flex items-center gap-3">
+        <Plus size={14} className="text-stone/30 flex-shrink-0" />
+        <input
+          type="text"
+          value={newTaskTitle}
+          onChange={e => setNewTaskTitle(e.target.value)}
+          placeholder="Add a task..."
+          className="flex-1 text-[13px] text-charcoal placeholder:text-stone/30
+            bg-transparent border-none outline-none py-1.5"
+        />
+      </form>
+
       {project.tasks.length === 0 && (
         <div className="text-[13px] text-stone/40 py-2 mb-2">
-          Add tasks below, or use checkboxes in the editor above
+          Use checkboxes in the editor above, or add tasks here
         </div>
       )}
 
@@ -379,7 +369,6 @@ export function ProjectModalTasks({ project }: ProjectModalTasksProps) {
               color={categoryConfig.color}
               projectId={project.id}
               onToggle={() => handleToggleTask(task.id)}
-              onToggleUncomfortable={() => handleToggleUncomfortable(task.id)}
               onDelete={() => deleteTask(task.id, project.id)}
               onRename={(title) => updateTask(task.id, project.id, { title })}
             />
@@ -387,35 +376,33 @@ export function ProjectModalTasks({ project }: ProjectModalTasksProps) {
         </SortableContext>
       </DndContext>
 
-      {/* Done tasks — static, pinned at bottom */}
-      {doneTasks.length > 0 && activeTasks.length > 0 && (
-        <div className="border-t border-[#F0EEEB] mt-1.5 pt-1.5" />
+      {/* Done tasks — most recent 5 visible, rest collapsible */}
+      {doneTasks.length > 0 && (
+        <>
+          {activeTasks.length > 0 && <div className="border-t border-[#F0EEEB] mt-1.5 pt-1.5" />}
+          {doneTasks.slice(0, showAllDone ? doneTasks.length : DONE_VISIBLE).map(task => (
+            <DoneTaskRow
+              key={task.id}
+              task={task}
+              color={categoryConfig.color}
+              projectId={project.id}
+              onToggle={() => handleToggleTask(task.id)}
+              onDelete={() => deleteTask(task.id, project.id)}
+              onRename={(title) => updateTask(task.id, project.id, { title })}
+            />
+          ))}
+          {doneTasks.length > DONE_VISIBLE && (
+            <button
+              onClick={() => setShowAllDone(v => !v)}
+              className="mt-1 text-[11px] text-stone/40 hover:text-stone/60 transition-colors"
+            >
+              {showAllDone
+                ? 'Show less'
+                : `+ ${doneTasks.length - DONE_VISIBLE} more done`}
+            </button>
+          )}
+        </>
       )}
-      {doneTasks.map(task => (
-        <DoneTaskRow
-          key={task.id}
-          task={task}
-          color={categoryConfig.color}
-          projectId={project.id}
-          onToggle={() => handleToggleTask(task.id)}
-          onToggleUncomfortable={() => handleToggleUncomfortable(task.id)}
-          onDelete={() => deleteTask(task.id, project.id)}
-          onRename={(title) => updateTask(task.id, project.id, { title })}
-        />
-      ))}
-
-      {/* Add task form */}
-      <form onSubmit={handleAddTask} className="mt-2 flex items-center gap-3">
-        <Plus size={14} className="text-stone/30 flex-shrink-0" />
-        <input
-          type="text"
-          value={newTaskTitle}
-          onChange={e => setNewTaskTitle(e.target.value)}
-          placeholder="Add a task..."
-          className="flex-1 text-[13px] text-charcoal placeholder:text-stone/30
-            bg-transparent border-none outline-none py-1.5"
-        />
-      </form>
     </div>
   )
 }

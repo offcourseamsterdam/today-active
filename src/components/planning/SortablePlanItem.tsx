@@ -3,7 +3,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { GripVertical, X, Clock } from 'lucide-react'
 import { useStore } from '../../store'
 import { CATEGORY_CONFIG } from '../../types'
-import type { PlanItem } from '../../types'
+import type { PlanItem, TaskType } from '../../types'
 import { CategoryBadge } from '../ui/CategoryBadge'
 import { findTaskById } from '../../lib/taskLookup'
 import { TierBadge } from './TierBadge'
@@ -13,7 +13,7 @@ interface SortablePlanItemProps {
   intention?: string
   onIntentionChange?: (v: string) => void
   onRemove: (id: string) => void
-  onTierChange: (id: string, newTier: 'deep' | 'short' | 'maintenance') => void
+  onTierChange: (id: string, newTaskType: TaskType) => void
 }
 
 export function SortablePlanItem({ item, intention, onIntentionChange, onRemove, onTierChange }: SortablePlanItemProps) {
@@ -70,11 +70,11 @@ export function SortablePlanItem({ item, intention, onIntentionChange, onRemove,
           <GripVertical size={14} />
         </div>
 
-        {/* Tier badge */}
+        {/* Tier badge — show taskType if available (e.g. reminder), fall back to plan tier */}
         <TierBadge
-          tier={item.tier}
+          tier={(item.type === 'task' ? taskResult?.task.taskType : undefined) ?? item.tier}
           itemType={item.type}
-          onChange={(newTier) => onTierChange(item.id, newTier)}
+          onChange={(newTaskType) => onTierChange(item.id, newTaskType)}
         />
 
         {/* Item content */}

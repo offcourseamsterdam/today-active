@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { format } from 'date-fns'
-import { X, RotateCcw, Clock } from 'lucide-react'
+import { X, RotateCcw, Clock, Bell } from 'lucide-react'
 import { useStore } from '../../store'
 import { findTaskById } from '../../lib/taskLookup'
 import { findMeetingById } from '../../lib/meetingLookup'
@@ -165,7 +165,12 @@ export function MaintenanceTier({ onEnterCitadel, onOpenMeetings }: MaintenanceT
               <span className={`text-[13px] flex-1 ${isDone ? 'text-stone/50 line-through' : 'text-charcoal'}`}>
                 {task.title}
               </span>
-              {task.isRecurring && <RotateCcw size={10} className="text-stone/25 flex-shrink-0" />}
+              {task.taskType === 'reminder'
+                ? <Bell size={10} className="text-teal-400 flex-shrink-0" />
+                : task.isRecurring
+                  ? <RotateCcw size={10} className="text-stone/25 flex-shrink-0" />
+                  : null
+              }
               {onEnterCitadel && (() => {
                 const info = getFocusTimeLabel(taskId, inlineTimer, pomodoroLog)
                 return (

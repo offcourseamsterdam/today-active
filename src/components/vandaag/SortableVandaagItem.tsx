@@ -4,7 +4,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { GripVertical, X, Clock, Play } from 'lucide-react'
 import { useStore } from '../../store'
 import { CATEGORY_CONFIG } from '../../types'
-import type { PlanItem } from '../../types'
+import type { PlanItem, TaskType } from '../../types'
 import { findTaskById } from '../../lib/taskLookup'
 import { TaskCheckbox } from '../ui/TaskCheckbox'
 import { TierBadge } from '../planning/TierBadge'
@@ -16,7 +16,7 @@ interface SortableVandaagItemProps {
   item: PlanItem
   onOpenMeetings?: () => void
   onRemove: (id: string) => void
-  onTierChange: (id: string, newTier: 'deep' | 'short' | 'maintenance') => void
+  onTierChange: (id: string, newTaskType: TaskType) => void
   toggleTask: (taskId: string) => void
 }
 
@@ -97,11 +97,11 @@ export function SortableVandaagItem({
           <GripVertical size={14} />
         </div>
 
-        {/* Tier badge */}
+        {/* Tier badge — show taskType if set (e.g. reminder) */}
         <TierBadge
-          tier={item.tier}
+          tier={(item.type === 'task' ? taskResult?.task.taskType : undefined) ?? item.tier}
           itemType={item.type}
-          onChange={(newTier) => onTierChange(item.id, newTier)}
+          onChange={(newTaskType) => onTierChange(item.id, newTaskType)}
         />
 
         {/* ── Project content ── */}

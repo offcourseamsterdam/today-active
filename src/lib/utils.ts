@@ -29,6 +29,11 @@ export function normalizeWaitingOn(raw: unknown): WaitingOn[] {
   return []
 }
 
+export function isWaitingSnoozed(entry: WaitingOn, today: Date = new Date()): boolean {
+  if (!entry.snoozedUntil) return false
+  return new Date(entry.snoozedUntil) > today
+}
+
 /** Strip undefined values — Firestore does not accept undefined */
 export function deepClean<T>(val: T): T {
   return JSON.parse(JSON.stringify(val, (_, v) => (v === undefined ? null : v)))

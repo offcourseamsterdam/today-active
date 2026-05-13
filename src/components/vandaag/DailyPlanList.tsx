@@ -16,7 +16,7 @@ import { useStore } from '../../store'
 import { useTodayPlan } from '../../hooks/useTodayPlan'
 import { useTaskToggle } from '../../hooks/useTaskToggle'
 import { deriveItemOrder, deriveBlockOrder } from '../../lib/planOrder'
-import type { PlanItem } from '../../types'
+import type { PlanItem, TaskType } from '../../types'
 import { SortableVandaagItem } from './SortableVandaagItem'
 import { TierSectionHeader } from './TierSectionHeader'
 
@@ -105,16 +105,17 @@ export function DailyPlanList({ onOpenMeetings }: DailyPlanListProps) {
     syncToStore(newItems)
   }
 
-  function handleTierChange(id: string, newTier: 'deep' | 'short' | 'maintenance') {
+  function handleTierChange(id: string, newTaskType: TaskType) {
+    const planTier: 'deep' | 'short' | 'maintenance' = newTaskType === 'reminder' ? 'maintenance' : newTaskType
     const item = orderedItems.find(i => i.id === id)
     if (!item) return
 
     // Enforce constraints
-    if (newTier === 'deep') {
+    if (planTier === 'deep') {
       const existingDeep = orderedItems.find(i => i.tier === 'deep' && i.type === 'project')
-      if (existingDeep && existingDeep.id !== id) return // max 1 deep project
+      if (existingDeep && existingDeep.id !== id) return
     }
-    if (newTier === 'short') {
+    if (planTier === 'short') {
       const shortSlots = orderedItems
         .filter(i => i.tier === 'short' && i.id !== id)
         .reduce((sum, i) => {
@@ -127,20 +128,33 @@ export function DailyPlanList({ onOpenMeetings }: DailyPlanListProps) {
       const thisSlots = item.type === 'meeting'
         ? Math.ceil(([...meetings, ...recurringMeetings].find(m => m.id === id)?.durationMinutes ?? 60) / 60)
         : 1
-      if (shortSlots + thisSlots > 3) return // max 3 short slots
+      if (shortSlots + thisSlots > 3) return
     }
 
-    // Update tier and re-sort: group by tier, keeping within-tier order
-    const updated = orderedItems.map(i => i.id === id ? { ...i, tier: newTier } : i)
-    // Re-group items by tier while preserving within-tier order
+    const updated = orderedItems.map(i => i.id === id ? { ...i, tier: planTier } : i)
     const blockOrder = deriveBlockOrder(updated)
     const grouped: PlanItem[] = []
     for (const tier of blockOrder) {
       grouped.push(...updated.filter(i => i.tier === tier))
     }
-
     setOrderedItems(grouped)
     syncToStore(grouped)
+
+    // Persist taskType back to the source record
+    const state = useStore.getState()
+    const isRecurring = state.recurringTasks.some(t => t.id === id)
+    if (isRecurring) {
+      state.updateRecurringTask(id, { taskType: newTaskType })
+    } else if (state.orphanTasks.some(t => t.id === id)) {
+      state.updateOrphanTask(id, { taskType: newTaskType })
+    } else {
+      useStore.setState(s => ({
+        projects: s.projects.map(p => ({
+          ...p,
+          tasks: p.tasks.map(t => t.id === id ? { ...t, taskType: newTaskType } : t),
+        })),
+      }))
+    }
   }
 
   function handleRemove(id: string) {

@@ -136,14 +136,6 @@ export function OrphanTaskModal({ task, onClose }: OrphanTaskModalProps) {
             </h2>
           )}
 
-          {/* Uncomfortable badge */}
-          {task.isUncomfortable && (
-            <div className="mb-4 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full
-              bg-amber-50 border border-amber-200/60 text-amber-700 text-[11px] font-medium">
-              Avoided
-            </div>
-          )}
-
           {/* Rich text editor */}
           <div className="border-t border-border pt-4">
             <div className="text-[11px] uppercase tracking-[0.08em] text-stone font-medium mb-3">

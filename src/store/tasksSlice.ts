@@ -25,7 +25,7 @@ export function makeTaskActions(set: StoreSet, get: StoreGet) {
         set(state => ({
           projects: state.projects.map(p =>
             p.id === projectId
-              ? { ...p, tasks: [...p.tasks, task], updatedAt: new Date().toISOString() }
+              ? { ...p, tasks: [task, ...p.tasks], updatedAt: new Date().toISOString() }
               : p
           ),
         }))

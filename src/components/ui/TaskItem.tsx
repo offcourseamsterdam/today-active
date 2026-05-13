@@ -1,7 +1,6 @@
 import { useState, useRef } from 'react'
 import { X, FolderOpen } from 'lucide-react'
 import { TaskCheckbox } from './TaskCheckbox'
-import { UncomfortableBadge } from './UncomfortableBadge'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import type { Project, Task } from '../../types'
 
@@ -42,9 +41,7 @@ export function TaskItem({ task, projectTitle, projects, onToggle, onRemove, onA
             <span className="text-[10px] text-stone/50 ml-2">{projectTitle}</span>
           )
         )}
-        {task.isUncomfortable && (
-          <span className="ml-2"><UncomfortableBadge /></span>
-        )}
+
       </div>
 
       {/* Assign to project button — only for orphan tasks */}

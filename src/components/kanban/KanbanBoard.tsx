@@ -115,6 +115,12 @@ export function KanbanBoard({
     [visibleProjects]
   )
 
+  // In-progress projects with waitingOn entries — shown as cross-listed in the waiting column
+  const crossListedInWaiting = useMemo(
+    () => visibleProjects.filter(p => p.status === 'in_progress' && (p.waitingOn?.length ?? 0) > 0),
+    [visibleProjects]
+  )
+
   // Active (non-done, non-dropped) orphan tasks routed to their column
   const activeOrphans = useMemo(
     () => orphanTasks.filter(t => t.status !== 'dropped' && t.status !== 'done'),
@@ -421,6 +427,7 @@ export function KanbanBoard({
                     combinedCount={isWipColumn ? getWipCount() : undefined}
                     projects={getProjectsByStatus(col.id)}
                     orphanTasks={getOrphansByColumn(col.id)}
+                    crossListedProjects={col.id === 'waiting' ? crossListedInWaiting : undefined}
                     onProjectClick={handleProjectClick}
                     dragPreview={
                       dragPreview?.targetCol === col.id

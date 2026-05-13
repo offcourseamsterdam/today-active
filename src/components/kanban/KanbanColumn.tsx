@@ -4,6 +4,9 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { ProjectCard } from './ProjectCard'
 import { StandaloneTaskCard } from './StandaloneTaskCard'
 import { DropGhost } from '../ui/DropGhost'
+import { WaitingEntryRow } from '../ui/WaitingEntryRow'
+import { normalizeWaitingOn } from '../../lib/utils'
+import { CATEGORY_CONFIG } from '../../types'
 import type { Project, ProjectStatus, Task } from '../../types'
 
 interface KanbanColumnProps {
@@ -21,12 +24,58 @@ interface KanbanColumnProps {
   onOrphanUpdate: (taskId: string, updates: Partial<Task>) => void
   allProjects: Project[]
   dragPreview?: { activeId: string; afterItemId: string | null; height: number; beforeFirst?: boolean }
+  /** Projects from another column that have waitingOn entries — shown as non-draggable linked cards */
+  crossListedProjects?: Project[]
+}
+
+function CrossListedCard({ project, onClick }: { project: Project; onClick: () => void }) {
+  const catConfig = CATEGORY_CONFIG[project.category]
+  const waitingEntries = normalizeWaitingOn(project.waitingOn)
+  const activeTasks = project.tasks.filter(t => t.status !== 'done')
+
+  return (
+    <div
+      onClick={onClick}
+      className="rounded-[8px] mb-2 border border-dashed border-border cursor-pointer
+        bg-card/60 hover:bg-card hover:border-stone/30 transition-all duration-150 overflow-hidden"
+    >
+      <div className="px-3 py-2.5 flex items-start gap-2.5">
+        <div className="w-2 h-2 rounded-sm mt-1 flex-shrink-0" style={{ background: catConfig.bg, border: `1px solid ${catConfig.color}40` }} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[12px] font-medium text-charcoal/70 truncate">{project.title}</span>
+            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-500 border border-blue-100 whitespace-nowrap">
+              also active
+            </span>
+          </div>
+          {activeTasks.length > 0 && (
+            <div className="mt-1 text-[10px] text-stone/40 truncate">{activeTasks[0].title}</div>
+          )}
+        </div>
+      </div>
+      {waitingEntries.length > 0 && (
+        <div className="px-3 pb-2 -mt-1" onPointerDown={e => e.stopPropagation()}>
+          {waitingEntries.map((entry, i) => (
+            <WaitingEntryRow
+              key={i}
+              entry={entry}
+              entryIndex={i}
+              projectId={project.id}
+              projectTitle={project.title}
+              actionsHoverOnly
+              onLabelClick={onClick}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function KanbanColumn({
   id, title, projects, orphanTasks, limit, combinedCount, onProjectClick,
   onOrphanComplete, onOrphanDelete, onOrphanAssignProject, onOrphanOpenNotes, onOrphanUpdate, allProjects,
-  dragPreview,
+  dragPreview, crossListedProjects = [],
 }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id })
 
@@ -106,13 +155,29 @@ export function KanbanColumn({
         {ghostIndex !== null && ghostIndex >= projects.length && <DropGhost height={dragPreview!.height} />}
       </SortableContext>
 
-      {projects.length === 0 && orphanTasks.length === 0 && !dragPreview && (
+      {projects.length === 0 && orphanTasks.length === 0 && crossListedProjects.length === 0 && !dragPreview && (
         <div className="text-center text-stone/40 text-[13px] py-8">
           {id === 'backlog' && 'Drop projects here'}
           {id === 'in_progress' && 'Drag projects to start'}
           {id === 'waiting' && 'Nothing waiting'}
           {id === 'done' && 'Nothing completed yet'}
         </div>
+      )}
+
+      {/* Cross-listed projects (e.g. in_progress with waitingOn entries shown in waiting column) */}
+      {crossListedProjects.length > 0 && (
+        <>
+          {(projects.length > 0 || orphanTasks.length > 0) && (
+            <div className="h-px bg-border/30 my-2" />
+          )}
+          {crossListedProjects.map(project => (
+            <CrossListedCard
+              key={`cross-${project.id}`}
+              project={project}
+              onClick={() => onProjectClick(project)}
+            />
+          ))}
+        </>
       )}
     </div>
   )

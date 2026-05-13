@@ -2,7 +2,7 @@ import { memo } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { CategoryBadge } from '../ui/CategoryBadge'
-import { WaitingBadge } from '../ui/WaitingBadge'
+import { WaitingEntryRow } from '../ui/WaitingEntryRow'
 import { daysSince, normalizeWaitingOn } from '../../lib/utils'
 import { CATEGORY_CONFIG } from '../../types'
 import type { Project } from '../../types'
@@ -169,12 +169,17 @@ export const ProjectCard = memo(function ProjectCard({ project, onClick, isDragO
 
         {/* Waiting entries */}
         {waitingEntries.length > 0 && (
-          <div className="mt-2 flex flex-col gap-2">
+          <div className="mt-2 flex flex-col -mx-1" onPointerDown={e => e.stopPropagation()}>
             {waitingEntries.map((entry, i) => (
-              <div key={i}>
-                <div className="text-[11px] text-stone">{entry.person}</div>
-                <WaitingBadge since={entry.since} />
-              </div>
+              <WaitingEntryRow
+                key={i}
+                entry={entry}
+                entryIndex={i}
+                projectId={project.id}
+                projectTitle={project.title}
+                actionsHoverOnly
+                onLabelClick={onClick}
+              />
             ))}
           </div>
         )}

@@ -28,10 +28,11 @@ import { useTomorrowPlan } from '../../hooks/useTomorrowPlan'
 import { useTodayPlan } from '../../hooks/useTodayPlan'
 import { findTaskById } from '../../lib/taskLookup'
 import { deriveItemOrder, deriveBlockOrder } from '../../lib/planOrder'
-import type { Project, Meeting, PlanItem } from '../../types'
+import type { Project, Meeting, PlanItem, TaskType } from '../../types'
 import { InventoryPanel } from './InventoryPanel'
 import { PlanningDragOverlay } from './PlanningDragOverlay'
 import { SortablePlanItem } from './SortablePlanItem'
+import { WaitingFollowUpPanel } from './WaitingFollowUpPanel'
 
 interface PlanningModalProps {
   onClose: () => void
@@ -74,6 +75,9 @@ export function PlanningModal({ onClose, day = 'tomorrow' }: PlanningModalProps)
   const meetings = useStore(s => s.meetings)
   const recurringMeetingsList = useStore(s => s.recurringMeetings)
   const addOrphanTask = useStore(s => s.addOrphanTask)
+  const updateOrphanTask = useStore(s => s.updateOrphanTask)
+  const updateRecurringTask = useStore(s => s.updateRecurringTask)
+  const moveOrphanTaskToProject = useStore(s => s.moveOrphanTaskToProject)
   const getTodayRecurringTasks = useStore(s => s.getTodayRecurringTasks)
   const getTomorrowRecurringTasks = useStore(s => s.getTomorrowRecurringTasks)
 
@@ -88,6 +92,8 @@ export function PlanningModal({ onClose, day = 'tomorrow' }: PlanningModalProps)
   const [intention, setIntention] = useState('')
   const [showMobileInventory, setShowMobileInventory] = useState(false)
   const [quickAdd, setQuickAdd] = useState('')
+  const [quickAddTier, setQuickAddTier] = useState<TaskType>('maintenance')
+  const [lastAddedId, setLastAddedId] = useState<string | null>(null)
 
   // Overdue recurring detection
   const todayRecurring = getTodayRecurringTasks()
@@ -154,15 +160,17 @@ export function PlanningModal({ onClose, day = 'tomorrow' }: PlanningModalProps)
     return shortSlots < 3 ? 'short' : 'maintenance'
   }
 
-  function handleTierChange(id: string, newTier: 'deep' | 'short' | 'maintenance') {
+  function handleTierChange(id: string, newTaskType: TaskType) {
+    // 'reminder' stays in maintenance tier for plan-slot purposes
+    const planTier: 'deep' | 'short' | 'maintenance' = newTaskType === 'reminder' ? 'maintenance' : newTaskType
+
     setOrderedItems(prev => {
-      // Check slot limits
-      if (newTier === 'deep') {
+      if (planTier === 'deep') {
         const item = prev.find(i => i.id === id)
         if (item?.type === 'task') return prev // Tasks can't be deep
         if (prev.filter(i => i.tier === 'deep' && i.id !== id).length >= 1) return prev
       }
-      if (newTier === 'short') {
+      if (planTier === 'short') {
         const currentShort = prev.filter(i => i.tier === 'short' && i.id !== id)
         const usedSlots = currentShort.reduce((sum, i) => {
           if (i.type === 'meeting') {
@@ -173,8 +181,34 @@ export function PlanningModal({ onClose, day = 'tomorrow' }: PlanningModalProps)
         }, 0)
         if (usedSlots >= 3) return prev
       }
-      return prev.map(i => i.id === id ? { ...i, tier: newTier } : i)
+      return prev.map(i => i.id === id ? { ...i, tier: planTier } : i)
     })
+
+    // Persist taskType back to the task record at the source of truth
+    const isRecurring = recurringTasks.some(t => t.id === id)
+    const isOrphan = orphanTasks.some(t => t.id === id)
+    const projectTask = !isRecurring && !isOrphan
+      ? (() => {
+          for (const p of projects) {
+            if (p.tasks.some(t => t.id === id)) return true
+          }
+          return false
+        })()
+      : false
+
+    if (isRecurring) {
+      updateRecurringTask(id, { taskType: newTaskType })
+    } else if (isOrphan) {
+      updateOrphanTask(id, { taskType: newTaskType })
+    } else if (projectTask) {
+      // Project tasks: update via project tasks array
+      useStore.setState(s => ({
+        projects: s.projects.map(p => ({
+          ...p,
+          tasks: p.tasks.map(t => t.id === id ? { ...t, taskType: newTaskType } : t),
+        })),
+      }))
+    }
   }
 
   // ─── DnD Handlers ─────────────────────────────────────────────
@@ -287,10 +321,28 @@ export function PlanningModal({ onClose, day = 'tomorrow' }: PlanningModalProps)
   function handleQuickAdd(e: React.FormEvent) {
     e.preventDefault()
     if (!quickAdd.trim()) return
+    const planTier: 'deep' | 'short' | 'maintenance' = quickAddTier === 'reminder' ? 'maintenance' : quickAddTier
     const id = addOrphanTask(quickAdd.trim())
-    setOrderedItems(prev => [...prev, { id, type: 'task', tier: 'maintenance' }])
+    updateOrphanTask(id, { taskType: quickAddTier })
+    setOrderedItems(prev => [...prev, { id, type: 'task', tier: planTier }])
+    setLastAddedId(id)
     setQuickAdd('')
   }
+
+  function handleAssignProject(projectId: string) {
+    if (!lastAddedId) return
+    moveOrphanTaskToProject(lastAddedId, projectId)
+    setLastAddedId(null)
+  }
+
+  const FOCUS_QUOTES = [
+    { text: 'Finish what you start.', author: null },
+    { text: 'Do one thing at a time, and do that one thing as if your life depended on it.', author: 'Eugene Grace' },
+    { text: 'You can do anything, but not everything.', author: 'David Allen' },
+    { text: 'The key is not to prioritize what\'s on your schedule, but to schedule your priorities.', author: 'Stephen Covey' },
+    { text: 'It\'s not enough to be busy — the question is, what are we busy about?', author: 'Thoreau' },
+  ]
+  const focusQuote = FOCUS_QUOTES[new Date().getDay() % FOCUS_QUOTES.length]
 
   // ─── Lock In ──────────────────────────────────────────────────
   const lockInPlan = useStore(s => s.lockInPlan)
@@ -362,6 +414,8 @@ export function PlanningModal({ onClose, day = 'tomorrow' }: PlanningModalProps)
           {/* Left column — flat plan list */}
           <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6">
             <div className="max-w-[640px] mx-auto space-y-4">
+              <WaitingFollowUpPanel />
+
               {/* Slot indicators */}
               <div className="flex items-center gap-4 text-[11px] text-[#7A746A]/60">
                 <span className={deepCount >= 1 ? 'text-indigo-500' : ''}>
@@ -428,27 +482,77 @@ export function PlanningModal({ onClose, day = 'tomorrow' }: PlanningModalProps)
                 </PlanDropZone>
               </SortableContext>
 
-              {/* Quick-add maintenance task */}
-              <form onSubmit={handleQuickAdd} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={quickAdd}
-                  onChange={e => setQuickAdd(e.target.value)}
-                  placeholder="Add maintenance task..."
-                  className="flex-1 px-3 py-2 rounded-[6px] border border-[#E8E4DD] bg-[#FAF9F7]
-                    text-[12px] text-[#2A2724] placeholder:text-[#7A746A]/40
-                    outline-none focus:border-[#2A2724]/30 transition-colors"
-                />
-                <button
-                  type="submit"
-                  disabled={!quickAdd.trim()}
-                  className="px-3 py-2 rounded-[6px] border border-[#E8E4DD]
-                    text-[12px] text-[#7A746A] hover:border-[#2A2724]/30 hover:text-[#2A2724]
-                    transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  Add
-                </button>
-              </form>
+              {/* Quick-add task */}
+              <div className="space-y-2">
+                <form onSubmit={handleQuickAdd} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={quickAdd}
+                    onChange={e => { setQuickAdd(e.target.value); setLastAddedId(null) }}
+                    placeholder="Add a task..."
+                    className="flex-1 px-3 py-2 rounded-[6px] border border-[#E8E4DD] bg-[#FAF9F7]
+                      text-[12px] text-[#2A2724] placeholder:text-[#7A746A]/40
+                      outline-none focus:border-[#2A2724]/30 transition-colors"
+                  />
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {(['maintenance', 'short', 'deep', 'reminder'] as const).map(tier => (
+                      <button
+                        key={tier}
+                        type="button"
+                        onClick={() => setQuickAddTier(tier)}
+                        className={`px-2 py-1.5 rounded-[5px] text-[10px] uppercase tracking-wide font-medium transition-all
+                          ${quickAddTier === tier
+                            ? tier === 'reminder'
+                              ? 'bg-teal-600 text-white'
+                              : 'bg-[#2A2724] text-white'
+                            : 'border border-[#E8E4DD] text-[#7A746A]/60 hover:border-[#2A2724]/30 hover:text-[#2A2724]'
+                          }`}
+                      >
+                        {tier === 'maintenance' ? 'M' : tier === 'short' ? 'S' : tier === 'deep' ? 'D' : 'R'}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={!quickAdd.trim()}
+                    className="px-3 py-2 rounded-[6px] border border-[#E8E4DD]
+                      text-[12px] text-[#7A746A] hover:border-[#2A2724]/30 hover:text-[#2A2724]
+                      transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Add
+                  </button>
+                </form>
+
+                {/* Assign to project after adding */}
+                {lastAddedId && (
+                  <div className="flex items-center gap-2 pl-1 animate-[fadeUpIn_150ms_ease-out]">
+                    <span className="text-[11px] text-[#7A746A]/50">Assign to project:</span>
+                    <div className="flex flex-wrap gap-1">
+                      {projects.map(p => (
+                        <button
+                          key={p.id}
+                          onClick={() => handleAssignProject(p.id)}
+                          className="text-[10px] px-2 py-0.5 rounded-full border border-[#E8E4DD]
+                            text-[#7A746A] hover:border-[#2A2724]/30 hover:text-[#2A2724] transition-all"
+                        >
+                          {p.title}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setLastAddedId(null)}
+                        className="text-[10px] px-2 py-0.5 text-[#7A746A]/40 hover:text-[#7A746A] transition-colors"
+                      >
+                        skip
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Focus quote */}
+                <p className="text-[10px] italic text-[#7A746A]/35 px-1 pt-1">
+                  &ldquo;{focusQuote.text}&rdquo;{focusQuote.author && <> — {focusQuote.author}</>}
+                </p>
+              </div>
             </div>
           </div>
 

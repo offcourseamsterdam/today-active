@@ -20,6 +20,7 @@ export function VandaagView({ onDayDone, collapsed, onToggleCollapse, onPeekTomo
   const tomorrowPlan = useStore(s => s.tomorrowPlan)
   const projects = useStore(s => s.projects)
   const getMissionCriticalStats = useStore(s => s.getMissionCriticalStats)
+
   const dark = useVandaagDark()
 
   const shortTaskIds = dailyPlan?.shortTasks || []
@@ -32,7 +33,7 @@ export function VandaagView({ onDayDone, collapsed, onToggleCollapse, onPeekTomo
   const quote = getTodayQuote()
 
   // Stats
-  const { missionCriticalDays, uncomfortableDone } = getMissionCriticalStats()
+  const { missionCriticalDays } = getMissionCriticalStats()
 
   const tiersActive = [
     hasDeepBlock,
@@ -175,18 +176,11 @@ export function VandaagView({ onDayDone, collapsed, onToggleCollapse, onPeekTomo
             <DailyPlanList onOpenMeetings={onOpenMeetings} />
 
             {/* Stats */}
-            {(missionCriticalDays > 0 || uncomfortableDone > 0) && (
+            {missionCriticalDays > 0 && (
               <div className="mt-3 flex items-center gap-5 px-1">
-                {missionCriticalDays > 0 && (
-                  <span className={`text-[11px] ${dark ? 'text-citadel-text/30' : 'text-stone/50'}`}>
-                    Mission critical: <span className={dark ? 'text-citadel-text/50' : 'text-stone'}>{missionCriticalDays} days worked</span>
-                  </span>
-                )}
-                {uncomfortableDone > 0 && (
-                  <span className={`text-[11px] ${dark ? 'text-citadel-text/30' : 'text-stone/50'}`}>
-                    Uncomfortable tasks done: <span className={dark ? 'text-citadel-text/50' : 'text-stone'}>{uncomfortableDone}</span>
-                  </span>
-                )}
+                <span className={`text-[11px] ${dark ? 'text-citadel-text/30' : 'text-stone/50'}`}>
+                  Mission critical: <span className={dark ? 'text-citadel-text/50' : 'text-stone'}>{missionCriticalDays} days worked</span>
+                </span>
               </div>
             )}
 

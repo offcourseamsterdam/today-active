@@ -1,17 +1,18 @@
 import { useState, useRef, useEffect } from 'react'
-import type { Tier } from '../../types'
+import type { TaskType } from '../../types'
 
 interface TierBadgeProps {
-  tier: Tier
+  tier: TaskType
   itemType: 'project' | 'task' | 'meeting'
-  onChange: (newTier: Tier) => void
+  onChange: (newTier: TaskType) => void
   disabled?: boolean
 }
 
-const TIER_STYLES: Record<Tier, { bg: string; text: string; label: string }> = {
+const TIER_STYLES: Record<TaskType, { bg: string; text: string; label: string }> = {
   deep: { bg: 'bg-indigo-100', text: 'text-indigo-700', label: 'DEEP' },
   short: { bg: 'bg-amber-100', text: 'text-amber-700', label: 'SHORT' },
   maintenance: { bg: 'bg-stone-100', text: 'text-stone-600', label: 'MAINT' },
+  reminder: { bg: 'bg-teal-100', text: 'text-teal-700', label: 'REMIND' },
 }
 
 export function TierBadge({ tier, itemType, onChange, disabled }: TierBadgeProps) {
@@ -29,9 +30,9 @@ export function TierBadge({ tier, itemType, onChange, disabled }: TierBadgeProps
 
   const style = TIER_STYLES[tier]
   // Tasks can't be deep
-  const availableTiers: Tier[] = itemType === 'task'
-    ? (['short', 'maintenance'] as const).filter(t => t !== tier)
-    : (['deep', 'short', 'maintenance'] as const).filter(t => t !== tier)
+  const availableTiers: TaskType[] = itemType === 'task'
+    ? (['short', 'maintenance', 'reminder'] as const).filter(t => t !== tier)
+    : (['deep', 'short', 'maintenance', 'reminder'] as const).filter(t => t !== tier)
 
   return (
     <div ref={ref} className="relative">

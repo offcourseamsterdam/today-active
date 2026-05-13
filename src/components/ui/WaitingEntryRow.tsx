@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, Calendar, Moon, X, type LucideIcon } from 'lucide-react'
+import { CheckCircle2, RotateCcw, Calendar, Moon, X, type LucideIcon } from 'lucide-react'
 import { addDays } from 'date-fns'
 import { useStore } from '../../store'
 import { normalizeWaitingOn } from '../../lib/utils'
@@ -66,6 +66,10 @@ export function WaitingEntryRow({
     updateProject(projectId, { waitingOn: updated.length > 0 ? updated : undefined })
   }
 
+  function handleGotIt() {
+    withUpdatedEntry(() => null)
+    setMenuOpen(false)
+  }
   function handleFollowedUp() {
     withUpdatedEntry(e => ({ ...e, since: new Date().toISOString(), snoozedUntil: undefined }))
     setMenuOpen(false)
@@ -120,6 +124,7 @@ export function WaitingEntryRow({
           anchor={rowRef.current}
           onMouseEnter={openMenu}
           onMouseLeave={scheduleClose}
+          onGotIt={handleGotIt}
           onFollowedUp={handleFollowedUp}
           onNudge={handleNudgeToday}
           onSnooze={handleSnooze}
@@ -136,6 +141,7 @@ interface ActionPopoverProps {
   anchor: HTMLElement
   onMouseEnter: () => void
   onMouseLeave: () => void
+  onGotIt: () => void
   onFollowedUp: () => void
   onNudge: () => void
   onSnooze: () => void
@@ -144,7 +150,7 @@ interface ActionPopoverProps {
 
 function ActionPopover({
   anchor, onMouseEnter, onMouseLeave,
-  onFollowedUp, onNudge, onSnooze, onRemove,
+  onGotIt, onFollowedUp, onNudge, onSnooze, onRemove,
 }: ActionPopoverProps) {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -153,8 +159,8 @@ function ActionPopover({
     // Position below the anchor, right-aligned to the anchor's right edge.
     // Flip above if there's not enough room below.
     const rect = anchor.getBoundingClientRect()
-    const MENU_WIDTH = 200
-    const MENU_HEIGHT_EST = 168
+    const MENU_WIDTH = 210
+    const MENU_HEIGHT_EST = 200
     const GAP = 4
     const viewportH = window.innerHeight
 
@@ -171,13 +177,15 @@ function ActionPopover({
   return createPortal(
     <div
       ref={menuRef}
-      style={{ position: 'absolute', top: pos.top, left: pos.left, width: 200 }}
+      style={{ position: 'absolute', top: pos.top, left: pos.left, width: 210 }}
       className="z-50 bg-card border border-border rounded-[10px] shadow-xl py-1
         animate-fade-in"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      <MenuItem icon={Check} label="Followed up" hint="reset timer" onClick={onFollowedUp} />
+      <MenuItem icon={CheckCircle2} label="Got it" hint="they delivered" onClick={onGotIt} variant="success" />
+      <div className="border-t border-border/60 my-1" />
+      <MenuItem icon={RotateCcw} label="Just followed up" hint="reset timer" onClick={onFollowedUp} />
       <MenuItem icon={Calendar} label="Nudge today" hint="adds task" onClick={onNudge} />
       <MenuItem icon={Moon} label="Snooze 3 days" onClick={onSnooze} />
       <div className="border-t border-border/60 my-1" />
@@ -192,18 +200,25 @@ interface MenuItemProps {
   label: string
   hint?: string
   onClick: () => void
-  variant?: 'default' | 'danger'
+  variant?: 'default' | 'success' | 'danger'
 }
 
 function MenuItem({ icon: Icon, label, hint, onClick, variant = 'default' }: MenuItemProps) {
+  const labelClass =
+    variant === 'danger' ? 'text-red-600 hover:text-red-700' :
+    variant === 'success' ? 'text-emerald-700 hover:text-emerald-800 font-medium' :
+    'text-charcoal'
+  const iconClass =
+    variant === 'danger' ? 'text-red-500' :
+    variant === 'success' ? 'text-emerald-500' :
+    'text-stone'
   return (
     <button
       onClick={e => { e.stopPropagation(); onClick() }}
       className={`w-full px-3 py-1.5 flex items-center gap-2.5 text-left text-[12px]
-        hover:bg-border-light/60 transition-colors
-        ${variant === 'danger' ? 'text-red-600 hover:text-red-700' : 'text-charcoal'}`}
+        hover:bg-border-light/60 transition-colors ${labelClass}`}
     >
-      <Icon size={13} className={variant === 'danger' ? 'text-red-500' : 'text-stone'} />
+      <Icon size={13} className={iconClass} />
       <span className="flex-1">{label}</span>
       {hint && <span className="text-[10px] text-stone/40">{hint}</span>}
     </button>

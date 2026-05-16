@@ -22,6 +22,7 @@ type Result =
 export function MakeActionablePanel({ task, project, onClose }: MakeActionablePanelProps) {
   const updateTask = useStore(s => s.updateTask)
   const addSubtask = useStore(s => s.addSubtask)
+  const deleteSubtask = useStore(s => s.deleteSubtask)
   const userTools = useStore(s => s.settings.userTools ?? DEFAULT_USER_TOOLS)
   const allProjects = useStore(s => s.projects)
   const contexts = useStore(s => s.settings.contexts ?? [])
@@ -152,6 +153,10 @@ export function MakeActionablePanel({ task, project, onClose }: MakeActionablePa
   function applySubtasks(parentTitle: string, subtasks: Array<{ title: string }>) {
     if (parentTitle && parentTitle !== task.title) {
       updateTask(task.id, project.id, { title: parentTitle })
+    }
+    // Replace existing open subtasks with new ones
+    for (const existing of (task.subtasks ?? []).filter(s => !s.done)) {
+      deleteSubtask(project.id, task.id, existing.id)
     }
     for (const sub of subtasks) {
       addSubtask(project.id, task.id, sub.title)

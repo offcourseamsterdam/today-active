@@ -24,6 +24,7 @@ type EditMap = Record<string, { newTitle?: string; subtasks?: string[] }>
 export function MakeActionableBulkPanel({ project, onClose }: MakeActionableBulkPanelProps) {
   const updateTask = useStore(s => s.updateTask)
   const addSubtask = useStore(s => s.addSubtask)
+  const deleteSubtask = useStore(s => s.deleteSubtask)
   const userTools = useStore(s => s.settings.userTools ?? DEFAULT_USER_TOOLS)
   const allProjects = useStore(s => s.projects)
   const contexts = useStore(s => s.settings.contexts ?? [])
@@ -140,6 +141,15 @@ export function MakeActionableBulkPanel({ project, onClose }: MakeActionableBulk
     })
   }
 
+  function deleteEditSubtask(taskId: string, index: number) {
+    setEdits(prev => {
+      const r = results.find(x => x.taskId === taskId)
+      const origSubs = r?.type === 'subtasks' ? r.subtasks.map(s => s.title) : []
+      const current = prev[taskId]?.subtasks ?? [...origSubs]
+      return { ...prev, [taskId]: { ...prev[taskId], subtasks: current.filter((_, i) => i !== index) } }
+    })
+  }
+
   function handleApply() {
     const uid = auth.currentUser?.uid
     for (const r of results) {
@@ -187,6 +197,10 @@ export function MakeActionableBulkPanel({ project, onClose }: MakeActionableBulk
         const effectiveTitle = edit?.newTitle ?? r.newTitle
         if (effectiveTitle && effectiveTitle !== task.title) {
           updateTask(task.id, project.id, { title: effectiveTitle })
+        }
+        // Remove existing open subtasks before adding new ones
+        for (const existing of (task.subtasks ?? []).filter(s => !s.done)) {
+          deleteSubtask(project.id, task.id, existing.id)
         }
         const effectiveSubs = edit?.subtasks
           ? edit.subtasks.map(t => ({ title: t }))
@@ -293,6 +307,7 @@ export function MakeActionableBulkPanel({ project, onClose }: MakeActionableBulk
                           editMap={edits[r.taskId]}
                           onEditTitle={title => setEditTitle(r.taskId, title)}
                           onEditSubtask={(i, title) => setEditSubtask(r.taskId, i, title)}
+                          onDeleteSubtask={i => deleteEditSubtask(r.taskId, i)}
                         />
                         {r.reasoning && (
                           <div className="mt-1.5 text-[10px] text-stone/40 italic">{r.reasoning}</div>
@@ -407,11 +422,13 @@ function BulkResultPreview({
   editMap,
   onEditTitle,
   onEditSubtask,
+  onDeleteSubtask,
 }: {
   result: Result
   editMap: EditMap | undefined
   onEditTitle: (title: string) => void
   onEditSubtask: (i: number, title: string) => void
+  onDeleteSubtask: (i: number) => void
 }) {
   if (result.type === 'concrete') {
     const title = editMap?.newTitle ?? result.newTitle
@@ -441,13 +458,20 @@ function BulkResultPreview({
         <div className="text-[10px] uppercase tracking-[0.08em] text-stone/50">Subtaken</div>
         <ul className="space-y-0.5 ml-1">
           {subtaskTitles.map((title, i) => (
-            <li key={i} className="text-[12px] text-charcoal/80 flex items-center gap-1.5">
+            <li key={i} className="text-[12px] text-charcoal/80 flex items-center gap-1.5 group/sub">
               <span className="w-1 h-1 rounded-full bg-stone/40 flex-shrink-0" />
               <InlineField
                 value={title}
                 onChange={v => onEditSubtask(i, v)}
                 className="flex-1"
               />
+              <button
+                type="button"
+                onClick={() => onDeleteSubtask(i)}
+                className="opacity-0 group-hover/sub:opacity-40 hover:!opacity-100 text-stone hover:text-red-500 flex-shrink-0 transition-all"
+              >
+                <X size={10} />
+              </button>
             </li>
           ))}
         </ul>

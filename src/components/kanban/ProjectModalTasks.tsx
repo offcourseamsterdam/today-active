@@ -29,7 +29,7 @@ interface ProjectModalTasksProps {
 }
 
 // ─── Inline editable title ──────────────────────────────────────
-function InlineTitle({ value, isDone, onSave }: { value: string; isDone: boolean; onSave: (v: string) => void }) {
+function InlineTitle({ value, isDone, onSave, onDemote }: { value: string; isDone: boolean; onSave: (v: string) => void; onDemote?: () => void }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -58,6 +58,9 @@ function InlineTitle({ value, isDone, onSave }: { value: string; isDone: boolean
         onKeyDown={e => {
           if (e.key === 'Enter') { e.preventDefault(); commit() }
           if (e.key === 'Escape') { setDraft(value); setEditing(false) }
+          if (e.key === 'Tab' && !e.shiftKey && onDemote) {
+            e.preventDefault(); commit(); onDemote()
+          }
         }}
         className="text-[13px] text-charcoal flex-1 min-w-0 bg-transparent border-none outline-none
           border-b border-b-[#2A2724]/20 focus:border-b-[#2A2724]/40 py-0"
@@ -78,7 +81,7 @@ function InlineTitle({ value, isDone, onSave }: { value: string; isDone: boolean
 }
 
 // ─── Subtask list (inline expand) ───────────────────────────────
-function SubtaskList({ task, projectId, color }: { task: Task; projectId: string; color: string }) {
+function SubtaskList({ task, projectId, color, onPromote }: { task: Task; projectId: string; color: string; onPromote?: (subtaskId: string) => void }) {
   const addSubtask = useStore(s => s.addSubtask)
   const toggleSubtask = useStore(s => s.toggleSubtask)
   const deleteSubtask = useStore(s => s.deleteSubtask)
@@ -98,7 +101,17 @@ function SubtaskList({ task, projectId, color }: { task: Task; projectId: string
   return (
     <div className="ml-[38px] mb-1 space-y-0.5">
       {subtasks.map(sub => (
-        <div key={sub.id} className="flex items-center gap-2 py-0.5 group/sub">
+        <div
+          key={sub.id}
+          className="flex items-center gap-2 py-0.5 group/sub"
+          tabIndex={0}
+          onKeyDown={e => {
+            if (e.key === 'Tab' && e.shiftKey && !sub.done && onPromote) {
+              e.preventDefault()
+              onPromote(sub.id)
+            }
+          }}
+        >
           <button
             onClick={() => toggleSubtask(projectId, task.id, sub.id)}
             className={`w-3.5 h-3.5 rounded-[3px] border flex items-center justify-center flex-shrink-0 transition-colors
@@ -171,6 +184,8 @@ function SortableTaskRow({
   onDelete,
   onRename,
   onMakeActionable,
+  onDemote,
+  onPromote,
 }: {
   task: Task
   color: string
@@ -179,6 +194,8 @@ function SortableTaskRow({
   onDelete: () => void
   onRename: (title: string) => void
   onMakeActionable: () => void
+  onDemote: () => void
+  onPromote: (subtaskId: string) => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const {
@@ -196,7 +213,15 @@ function SortableTaskRow({
   }
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      onKeyDown={e => {
+        if (e.target !== e.currentTarget) return
+        if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); onDemote() }
+      }}
+    >
       <div
         className={`flex items-center gap-2 py-1.5 group rounded-[6px] transition-all
           ${isDragging ? 'opacity-50 bg-[#FAF9F7] z-10' : ''}`}
@@ -213,7 +238,7 @@ function SortableTaskRow({
           onChange={onToggle}
           color={color}
         />
-        <InlineTitle value={task.title} isDone={task.status === 'done'} onSave={onRename} />
+        <InlineTitle value={task.title} isDone={task.status === 'done'} onSave={onRename} onDemote={onDemote} />
         <SubtaskChip task={task} expanded={expanded} onToggle={() => setExpanded(e => !e)} />
         <button
           onClick={onMakeActionable}
@@ -229,7 +254,7 @@ function SortableTaskRow({
           <Trash2 size={13} />
         </button>
       </div>
-      {expanded && <SubtaskList task={task} projectId={projectId} color={color} />}
+      {expanded && <SubtaskList task={task} projectId={projectId} color={color} onPromote={onPromote} />}
     </div>
   )
 }
@@ -283,6 +308,7 @@ type AiSuggestState =
 export function ProjectModalTasks({ project }: ProjectModalTasksProps) {
   const addTask = useStore(s => s.addTask)
   const addSubtask = useStore(s => s.addSubtask)
+  const deleteSubtask = useStore(s => s.deleteSubtask)
   const updateTask = useStore(s => s.updateTask)
   const deleteTask = useStore(s => s.deleteTask)
   const recordDayWorked = useStore(s => s.recordDayWorked)
@@ -433,6 +459,42 @@ export function ProjectModalTasks({ project }: ProjectModalTasksProps) {
     if (newDone && project.trackProgress) {
       recordDayWorked(project.id)
     }
+  }
+
+  function handleDemote(taskId: string) {
+    const idx = activeTasks.findIndex(t => t.id === taskId)
+    if (idx <= 0) return // no task above
+    const above = activeTasks[idx - 1]
+    const current = activeTasks[idx]
+    addSubtask(project.id, above.id, current.title)
+    deleteTask(current.id, project.id)
+  }
+
+  function handlePromote(parentTaskId: string, subtaskId: string) {
+    const parentTask = activeTasks.find(t => t.id === parentTaskId)
+    if (!parentTask) return
+    const sub = parentTask.subtasks?.find(s => s.id === subtaskId)
+    if (!sub) return
+
+    // Create top-level task + delete subtask (Zustand is synchronous)
+    const newId = addTask(sub.title, project.id)
+    deleteSubtask(project.id, parentTaskId, subtaskId)
+
+    // Place new task right after the parent in the active list
+    const state = useStore.getState()
+    const updatedProj = state.projects.find(p => p.id === project.id)
+    if (!updatedProj) return
+    const updatedActive = updatedProj.tasks.filter(t => t.status !== 'done' && t.status !== 'dropped')
+    const withoutNew = updatedActive.filter(t => t.id !== newId)
+    const parentIdx = withoutNew.findIndex(t => t.id === parentTaskId)
+    if (parentIdx === -1) return
+    const reordered = [
+      ...withoutNew.slice(0, parentIdx + 1).map(t => t.id),
+      newId,
+      ...withoutNew.slice(parentIdx + 1).map(t => t.id),
+    ]
+    const doneIds = updatedProj.tasks.filter(t => t.status === 'done').map(t => t.id)
+    reorderProjectTasks(project.id, [...reordered, ...doneIds])
   }
 
   function handleDragEnd(event: DragEndEvent) {
@@ -594,6 +656,8 @@ export function ProjectModalTasks({ project }: ProjectModalTasksProps) {
               onDelete={() => deleteTask(task.id, project.id)}
               onRename={(title) => updateTask(task.id, project.id, { title })}
               onMakeActionable={() => setActionableTaskId(task.id)}
+              onDemote={() => handleDemote(task.id)}
+              onPromote={(subtaskId) => handlePromote(task.id, subtaskId)}
             />
           ))}
         </SortableContext>

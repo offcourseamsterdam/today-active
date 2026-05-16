@@ -72,6 +72,10 @@ function devApiPlugin(): Plugin {
             handler = await import('./api/project-decisions')
           } else if (route === 'recent-meeting-summary') {
             handler = await import('./api/recent-meeting-summary')
+          } else if (route === 'make-actionable') {
+            handler = await import('./api/make-actionable')
+          } else if (route === 'health') {
+            handler = await import('./api/health')
           } else {
             res.writeHead(404)
             res.end('Not found')

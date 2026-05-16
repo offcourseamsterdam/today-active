@@ -16,13 +16,23 @@ interface FeedbackExample {
   outcome: 'accepted' | 'edited' | 'rejected'
 }
 
+interface RelatedProject {
+  title: string
+  category: string
+  status: string
+  activeTasks: string[]
+}
+
 interface MakeActionableRequest {
   tasks: TaskInput[]
   project: {
     title: string
+    category?: string
     notes?: string
     waitingOn?: Array<{ person: string; since: string }>
   }
+  contextName?: string        // e.g. "Boat Local" — the work context this project belongs to
+  relatedProjects?: RelatedProject[]  // other projects in the same context
   userTools: string[]
   recentFeedback?: FeedbackExample[]
 }
@@ -95,9 +105,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const projectContext = [
       `Project: "${body.project.title}"`,
-      body.project.notes ? `Project notes: ${body.project.notes.slice(0, 500)}` : '',
+      body.project.category ? `Categorie: ${body.project.category}` : '',
+      body.contextName ? `Bedrijfscontext: ${body.contextName}` : '',
+      body.project.notes ? `Project aantekeningen:\n${body.project.notes.slice(0, 1500)}` : '',
       body.project.waitingOn && body.project.waitingOn.length > 0
         ? `Wachten op: ${body.project.waitingOn.map(w => w.person).join(', ')}`
+        : '',
+      body.relatedProjects && body.relatedProjects.length > 0
+        ? `Andere actieve projecten in "${body.contextName ?? 'zelfde context'}":\n` +
+          body.relatedProjects.map(p =>
+            `  - "${p.title}" [${p.category}/${p.status}]` +
+            (p.activeTasks.length > 0 ? `: ${p.activeTasks.slice(0, 4).join(', ')}` : '')
+          ).join('\n')
         : '',
     ].filter(Boolean).join('\n')
 

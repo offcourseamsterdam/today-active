@@ -4,6 +4,7 @@ import { Sparkles, Check, X, RefreshCw, Edit2, Copy, MessageSquare, Mail, Phone,
 import { auth } from '../../lib/firebase'
 import { useStore } from '../../store'
 import { writeAIFeedback, loadRecentAIFeedback } from '../../lib/aiFeedback'
+import { extractBlockNoteText } from '../../lib/utils'
 import { DEFAULT_USER_TOOLS } from '../../types'
 import type { Project, Task } from '../../types'
 
@@ -22,6 +23,28 @@ export function MakeActionablePanel({ task, project, onClose }: MakeActionablePa
   const updateTask = useStore(s => s.updateTask)
   const addSubtask = useStore(s => s.addSubtask)
   const userTools = useStore(s => s.settings.userTools ?? DEFAULT_USER_TOOLS)
+  const allProjects = useStore(s => s.projects)
+  const contexts = useStore(s => s.settings.contexts ?? [])
+
+  const contextNames = (project.contextIds ?? [])
+    .map(id => contexts.find(c => c.id === id)?.name)
+    .filter(Boolean) as string[]
+
+  const relatedProjects = contextNames.length > 0
+    ? allProjects
+        .filter(p => p.id !== project.id && p.status !== 'done' &&
+          p.contextIds?.some(cid => project.contextIds?.includes(cid)))
+        .map(p => ({
+          title: p.title,
+          category: p.category,
+          status: p.status,
+          activeTasks: p.tasks
+            .filter(t => t.status !== 'done' && t.status !== 'dropped')
+            .slice(0, 5)
+            .map(t => t.title),
+        }))
+        .slice(0, 10)
+    : []
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -54,8 +77,12 @@ export function MakeActionablePanel({ task, project, onClose }: MakeActionablePa
             }],
             project: {
               title: project.title,
+              category: project.category,
+              notes: extractBlockNoteText(project.bodyContent, 1500),
               waitingOn: project.waitingOn,
             },
+            contextName: contextNames.length > 0 ? contextNames.join(', ') : undefined,
+            relatedProjects: relatedProjects.length > 0 ? relatedProjects : undefined,
             userTools,
             recentFeedback,
           }),

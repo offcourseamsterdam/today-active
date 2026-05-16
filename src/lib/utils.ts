@@ -38,3 +38,31 @@ export function isWaitingSnoozed(entry: WaitingOn, today: Date = new Date()): bo
 export function deepClean<T>(val: T): T {
   return JSON.parse(JSON.stringify(val, (_, v) => (v === undefined ? null : v)))
 }
+
+/** Extract plain text from BlockNote JSON bodyContent string */
+export function extractBlockNoteText(bodyContent: string, maxChars = 2000): string {
+  if (!bodyContent) return ''
+  try {
+    const blocks = JSON.parse(bodyContent) as unknown[]
+    return extractBlocks(blocks).trim().slice(0, maxChars)
+  } catch {
+    return ''
+  }
+}
+
+function extractBlocks(blocks: unknown[]): string {
+  if (!Array.isArray(blocks)) return ''
+  return blocks.map(block => {
+    if (!block || typeof block !== 'object') return ''
+    const b = block as Record<string, unknown>
+    const inline = Array.isArray(b.content)
+      ? (b.content as unknown[]).map(c => {
+          if (!c || typeof c !== 'object') return ''
+          const item = c as Record<string, unknown>
+          return item.type === 'text' ? String(item.text ?? '') : ''
+        }).join('')
+      : ''
+    const children = Array.isArray(b.children) ? extractBlocks(b.children as unknown[]) : ''
+    return [inline, children].filter(Boolean).join('\n')
+  }).filter(Boolean).join('\n')
+}

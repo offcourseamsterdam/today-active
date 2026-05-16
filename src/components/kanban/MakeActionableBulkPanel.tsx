@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Sparkles, X, RefreshCw, Check, MessageSquare, Mail, Phone, Globe } from 'lucide-react'
 import { auth } from '../../lib/firebase'
 import { useStore } from '../../store'
 import { writeAIFeedback, loadRecentAIFeedback } from '../../lib/aiFeedback'
+import { extractBlockNoteText } from '../../lib/utils'
 import { DEFAULT_USER_TOOLS } from '../../types'
 import type { Project } from '../../types'
 
@@ -17,17 +18,44 @@ type Result =
   | { taskId: string; type: 'subtasks'; newTitle?: string; subtasks: Array<{ title: string }>; reasoning?: string }
   | { taskId: string; type: 'alternatives'; alternatives: Array<{ title: string; channel?: string; draftMessage?: string }>; reasoning?: string }
 
+// edits map: taskId → overridden title / subtask titles
+type EditMap = Record<string, { newTitle?: string; subtasks?: string[] }>
+
 export function MakeActionableBulkPanel({ project, onClose }: MakeActionableBulkPanelProps) {
   const updateTask = useStore(s => s.updateTask)
   const addSubtask = useStore(s => s.addSubtask)
   const userTools = useStore(s => s.settings.userTools ?? DEFAULT_USER_TOOLS)
+  const allProjects = useStore(s => s.projects)
+  const contexts = useStore(s => s.settings.contexts ?? [])
 
   const activeTasks = project.tasks.filter(t => t.status !== 'done' && t.status !== 'dropped')
+
+  // Resolve work-context names and related projects
+  const contextNames = (project.contextIds ?? [])
+    .map(id => contexts.find(c => c.id === id)?.name)
+    .filter(Boolean) as string[]
+
+  const relatedProjects = contextNames.length > 0
+    ? allProjects
+        .filter(p => p.id !== project.id && p.status !== 'done' &&
+          p.contextIds?.some(cid => project.contextIds?.includes(cid)))
+        .map(p => ({
+          title: p.title,
+          category: p.category,
+          status: p.status,
+          activeTasks: p.tasks
+            .filter(t => t.status !== 'done' && t.status !== 'dropped')
+            .slice(0, 5)
+            .map(t => t.title),
+        }))
+        .slice(0, 10)
+    : []
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [results, setResults] = useState<Result[]>([])
   const [checked, setChecked] = useState<Set<string>>(new Set())
+  const [edits, setEdits] = useState<EditMap>({})
 
   useEffect(() => {
     let cancelled = false
@@ -49,8 +77,12 @@ export function MakeActionableBulkPanel({ project, onClose }: MakeActionableBulk
             })),
             project: {
               title: project.title,
+              category: project.category,
+              notes: extractBlockNoteText(project.bodyContent, 1500),
               waitingOn: project.waitingOn,
             },
+            contextName: contextNames.length > 0 ? contextNames.join(', ') : undefined,
+            relatedProjects: relatedProjects.length > 0 ? relatedProjects : undefined,
             userTools,
             recentFeedback,
           }),
@@ -94,6 +126,20 @@ export function MakeActionableBulkPanel({ project, onClose }: MakeActionableBulk
     })
   }
 
+  function setEditTitle(taskId: string, title: string) {
+    setEdits(prev => ({ ...prev, [taskId]: { ...prev[taskId], newTitle: title } }))
+  }
+
+  function setEditSubtask(taskId: string, index: number, title: string) {
+    setEdits(prev => {
+      const r = results.find(x => x.taskId === taskId)
+      const origSubs = r?.type === 'subtasks' ? r.subtasks.map(s => s.title) : []
+      const current = [...(prev[taskId]?.subtasks ?? origSubs)]
+      current[index] = title
+      return { ...prev, [taskId]: { ...prev[taskId], subtasks: current } }
+    })
+  }
+
   function handleApply() {
     const uid = auth.currentUser?.uid
     for (const r of results) {
@@ -116,28 +162,37 @@ export function MakeActionableBulkPanel({ project, onClose }: MakeActionableBulk
         }
         continue
       }
+      const edit = edits[r.taskId]
+
       if (r.type === 'concrete') {
+        const effectiveTitle = edit?.newTitle ?? r.newTitle
         updateTask(task.id, project.id, {
-          title: r.newTitle,
+          title: effectiveTitle,
           actionableChannel: r.channel || undefined,
           actionableDraft: r.draftMessage || undefined,
         })
         if (uid) {
+          const edited = effectiveTitle !== r.newTitle
           writeAIFeedback(uid, {
             taskId: task.id,
             projectId: project.id,
             original: task.title,
             suggested: r.newTitle,
             channel: r.channel,
-            outcome: 'accepted',
+            outcome: edited ? 'edited' : 'accepted',
+            userVersion: edited ? effectiveTitle : undefined,
           })
         }
       } else if (r.type === 'subtasks') {
-        if (r.newTitle && r.newTitle !== task.title) {
-          updateTask(task.id, project.id, { title: r.newTitle })
+        const effectiveTitle = edit?.newTitle ?? r.newTitle
+        if (effectiveTitle && effectiveTitle !== task.title) {
+          updateTask(task.id, project.id, { title: effectiveTitle })
         }
-        for (const sub of r.subtasks) {
-          addSubtask(project.id, task.id, sub.title)
+        const effectiveSubs = edit?.subtasks
+          ? edit.subtasks.map(t => ({ title: t }))
+          : r.subtasks
+        for (const sub of effectiveSubs) {
+          if (sub.title.trim()) addSubtask(project.id, task.id, sub.title.trim())
         }
         if (uid) {
           writeAIFeedback(uid, {
@@ -233,7 +288,12 @@ export function MakeActionableBulkPanel({ project, onClose }: MakeActionableBulk
                         <div className="text-[11px] text-stone/50 mb-1 line-through truncate">
                           {task.title}
                         </div>
-                        <BulkResultPreview result={r} />
+                        <BulkResultPreview
+                          result={r}
+                          editMap={edits[r.taskId]}
+                          onEditTitle={title => setEditTitle(r.taskId, title)}
+                          onEditSubtask={(i, title) => setEditSubtask(r.taskId, i, title)}
+                        />
                         {r.reasoning && (
                           <div className="mt-1.5 text-[10px] text-stone/40 italic">{r.reasoning}</div>
                         )}
@@ -278,7 +338,7 @@ export function MakeActionableBulkPanel({ project, onClose }: MakeActionableBulk
   )
 }
 
-// ─── Result preview cards ───────────────────────────────────────
+// ─── Result preview cards (inline-editable) ────────────────────
 
 function ChannelChip({ channel }: { channel: string }) {
   const iconMap: Record<string, typeof MessageSquare> = {
@@ -295,34 +355,106 @@ function ChannelChip({ channel }: { channel: string }) {
   )
 }
 
-function BulkResultPreview({ result }: { result: Result }) {
+interface EditMap { newTitle?: string; subtasks?: string[] }
+
+function InlineField({
+  value,
+  onChange,
+  className = '',
+}: { value: string; onChange: (v: string) => void; className?: string }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+  const ref = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { if (editing) ref.current?.focus() }, [editing])
+
+  function commit() {
+    const v = draft.trim()
+    if (v) onChange(v)
+    else setDraft(value)
+    setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <input
+        ref={ref}
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { e.preventDefault(); commit() }
+          if (e.key === 'Escape') { setDraft(value); setEditing(false) }
+        }}
+        className={`bg-transparent border-b border-stone/30 outline-none focus:border-stone/60 ${className}`}
+      />
+    )
+  }
+
+  return (
+    <span
+      onClick={() => { setDraft(value); setEditing(true) }}
+      title="Klik om te bewerken"
+      className={`cursor-text rounded-[2px] hover:bg-stone/8 transition-colors ${className}`}
+    >
+      {value}
+    </span>
+  )
+}
+
+function BulkResultPreview({
+  result,
+  editMap,
+  onEditTitle,
+  onEditSubtask,
+}: {
+  result: Result
+  editMap: EditMap | undefined
+  onEditTitle: (title: string) => void
+  onEditSubtask: (i: number, title: string) => void
+}) {
   if (result.type === 'concrete') {
+    const title = editMap?.newTitle ?? result.newTitle
     return (
       <div className="space-y-1.5">
-        <div className="text-[13px] text-charcoal font-medium">{result.newTitle}</div>
+        <InlineField
+          value={title}
+          onChange={onEditTitle}
+          className="text-[13px] text-charcoal font-medium w-full"
+        />
         {result.channel && <ChannelChip channel={result.channel} />}
       </div>
     )
   }
   if (result.type === 'subtasks') {
+    const parentTitle = editMap?.newTitle ?? result.newTitle
+    const subtaskTitles = editMap?.subtasks ?? result.subtasks.map(s => s.title)
     return (
       <div className="space-y-1">
-        {result.newTitle && result.newTitle !== result.subtasks[0]?.title && (
-          <div className="text-[13px] text-charcoal font-medium mb-1">{result.newTitle}</div>
+        {parentTitle && (
+          <InlineField
+            value={parentTitle}
+            onChange={onEditTitle}
+            className="text-[13px] text-charcoal font-medium w-full mb-1"
+          />
         )}
         <div className="text-[10px] uppercase tracking-[0.08em] text-stone/50">Subtaken</div>
         <ul className="space-y-0.5 ml-1">
-          {result.subtasks.map((s, i) => (
+          {subtaskTitles.map((title, i) => (
             <li key={i} className="text-[12px] text-charcoal/80 flex items-center gap-1.5">
-              <span className="w-1 h-1 rounded-full bg-stone/40" />
-              {s.title}
+              <span className="w-1 h-1 rounded-full bg-stone/40 flex-shrink-0" />
+              <InlineField
+                value={title}
+                onChange={v => onEditSubtask(i, v)}
+                className="flex-1"
+              />
             </li>
           ))}
         </ul>
       </div>
     )
   }
-  // alternatives
+  // alternatives — user must use per-task button
   return (
     <div className="space-y-1">
       <div className="text-[11px] text-amber-700 font-medium">
@@ -330,9 +462,7 @@ function BulkResultPreview({ result }: { result: Result }) {
       </div>
       <ul className="space-y-0.5">
         {result.alternatives.map((a, i) => (
-          <li key={i} className="text-[12px] text-charcoal/70">
-            • {a.title}
-          </li>
+          <li key={i} className="text-[12px] text-charcoal/70">• {a.title}</li>
         ))}
       </ul>
     </div>

@@ -20,6 +20,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { useStore } from '../../store'
 import { TaskCheckbox } from '../ui/TaskCheckbox'
+import { extractBlockNoteText } from '../../lib/utils'
 import { CATEGORY_CONFIG, DEFAULT_USER_TOOLS } from '../../types'
 import type { Project, Task } from '../../types'
 
@@ -287,6 +288,28 @@ export function ProjectModalTasks({ project }: ProjectModalTasksProps) {
   const recordDayWorked = useStore(s => s.recordDayWorked)
   const reorderProjectTasks = useStore(s => s.reorderProjectTasks)
   const userTools = useStore(s => s.settings.userTools ?? DEFAULT_USER_TOOLS)
+  const allProjects = useStore(s => s.projects)
+  const contexts = useStore(s => s.settings.contexts ?? [])
+
+  const contextNames = (project.contextIds ?? [])
+    .map(id => contexts.find(c => c.id === id)?.name)
+    .filter(Boolean) as string[]
+
+  const relatedProjects = contextNames.length > 0
+    ? allProjects
+        .filter(p => p.id !== project.id && p.status !== 'done' &&
+          p.contextIds?.some(cid => project.contextIds?.includes(cid)))
+        .map(p => ({
+          title: p.title,
+          category: p.category,
+          status: p.status,
+          activeTasks: p.tasks
+            .filter(t => t.status !== 'done' && t.status !== 'dropped')
+            .slice(0, 5)
+            .map(t => t.title),
+        }))
+        .slice(0, 10)
+    : []
 
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [showAllDone, setShowAllDone] = useState(false)
@@ -304,7 +327,13 @@ export function ProjectModalTasks({ project }: ProjectModalTasksProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tasks: [{ id: '__new__', title }],
-          project: { title: project.title },
+          project: {
+            title: project.title,
+            category: project.category,
+            notes: extractBlockNoteText(project.bodyContent, 800),
+          },
+          contextName: contextNames.length > 0 ? contextNames.join(', ') : undefined,
+          relatedProjects: relatedProjects.length > 0 ? relatedProjects : undefined,
           userTools,
           recentFeedback: [],
         }),

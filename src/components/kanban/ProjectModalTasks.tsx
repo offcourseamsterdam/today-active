@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { Plus, Trash2, GripVertical, ChevronRight, X, Sparkles } from 'lucide-react'
+import { Plus, Trash2, GripVertical, ChevronRight, X, Sparkles, RefreshCw, Check } from 'lucide-react'
 import { MakeActionablePanel } from './MakeActionablePanel'
 import { MakeActionableBulkPanel } from './MakeActionableBulkPanel'
 import {
@@ -20,7 +20,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { useStore } from '../../store'
 import { TaskCheckbox } from '../ui/TaskCheckbox'
-import { CATEGORY_CONFIG } from '../../types'
+import { CATEGORY_CONFIG, DEFAULT_USER_TOOLS } from '../../types'
 import type { Project, Task } from '../../types'
 
 interface ProjectModalTasksProps {
@@ -275,17 +275,91 @@ function DoneTaskRow({
 }
 
 // ─── Main component ─────────────────────────────────────────────
+type AiSuggestState =
+  | { phase: 'loading' }
+  | { phase: 'done'; subtasks: Array<{ title: string; checked: boolean }>; newTitle?: string }
+
 export function ProjectModalTasks({ project }: ProjectModalTasksProps) {
   const addTask = useStore(s => s.addTask)
+  const addSubtask = useStore(s => s.addSubtask)
   const updateTask = useStore(s => s.updateTask)
   const deleteTask = useStore(s => s.deleteTask)
   const recordDayWorked = useStore(s => s.recordDayWorked)
   const reorderProjectTasks = useStore(s => s.reorderProjectTasks)
+  const userTools = useStore(s => s.settings.userTools ?? DEFAULT_USER_TOOLS)
 
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [showAllDone, setShowAllDone] = useState(false)
   const [actionableTaskId, setActionableTaskId] = useState<string | null>(null)
   const [bulkPanelOpen, setBulkPanelOpen] = useState(false)
+  const [aiSuggest, setAiSuggest] = useState<AiSuggestState | null>(null)
+
+  async function triggerAISubtasks() {
+    const title = newTaskTitle.trim()
+    if (!title || aiSuggest?.phase === 'loading') return
+    setAiSuggest({ phase: 'loading' })
+    try {
+      const resp = await fetch('/api/make-actionable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tasks: [{ id: '__new__', title }],
+          project: { title: project.title },
+          userTools,
+          recentFeedback: [],
+        }),
+      })
+      if (!resp.ok) { setAiSuggest(null); return }
+      const data = await resp.json() as { results: Array<{ type: string; newTitle?: string; subtasks?: Array<{ title: string }>; alternatives?: Array<{ title: string }> }> }
+      const result = data.results[0]
+      if (!result) { setAiSuggest(null); return }
+
+      if (result.type === 'subtasks' && result.subtasks && result.subtasks.length > 0) {
+        setAiSuggest({
+          phase: 'done',
+          subtasks: result.subtasks.map(s => ({ title: s.title, checked: true })),
+          newTitle: result.newTitle,
+        })
+      } else if (result.type === 'concrete' && result.newTitle) {
+        // Task is already specific — refine the title in place
+        setNewTaskTitle(result.newTitle)
+        setAiSuggest(null)
+      } else if (result.type === 'alternatives' && result.alternatives && result.alternatives.length > 0) {
+        // Take first alternative as a concrete rewrite
+        setNewTaskTitle(result.alternatives[0].title)
+        setAiSuggest(null)
+      } else {
+        setAiSuggest(null)
+      }
+    } catch {
+      setAiSuggest(null)
+    }
+  }
+
+  function toggleAiSubtask(i: number) {
+    setAiSuggest(prev => {
+      if (!prev || prev.phase !== 'done') return prev
+      const subtasks = prev.subtasks.map((s, idx) =>
+        idx === i ? { ...s, checked: !s.checked } : s
+      )
+      return { ...prev, subtasks }
+    })
+  }
+
+  function commitWithAI() {
+    const title = (aiSuggest?.phase === 'done' && aiSuggest.newTitle)
+      ? aiSuggest.newTitle
+      : newTaskTitle.trim()
+    if (!title) return
+    const newId = addTask(title, project.id)
+    if (aiSuggest?.phase === 'done') {
+      for (const sub of aiSuggest.subtasks.filter(s => s.checked)) {
+        addSubtask(project.id, newId, sub.title)
+      }
+    }
+    setNewTaskTitle('')
+    setAiSuggest(null)
+  }
 
   const DONE_VISIBLE = 5
 
@@ -308,8 +382,13 @@ export function ProjectModalTasks({ project }: ProjectModalTasksProps) {
   function handleAddTask(e: React.FormEvent) {
     e.preventDefault()
     if (!newTaskTitle.trim()) return
-    addTask(newTaskTitle.trim(), project.id)
-    setNewTaskTitle('')
+    if (aiSuggest?.phase === 'done') {
+      commitWithAI()
+    } else {
+      addTask(newTaskTitle.trim(), project.id)
+      setNewTaskTitle('')
+      setAiSuggest(null)
+    }
   }
 
   function handleToggleTask(taskId: string) {
@@ -367,18 +446,105 @@ export function ProjectModalTasks({ project }: ProjectModalTasksProps) {
         )}
       </div>
 
-      {/* Add task form — at top so new tasks build downward */}
-      <form onSubmit={handleAddTask} className="mb-2 flex items-center gap-3">
+      {/* Add task form — Tab triggers AI subtask generation */}
+      <form onSubmit={handleAddTask} className="mb-1 flex items-center gap-3">
         <Plus size={14} className="text-stone/30 flex-shrink-0" />
         <input
           type="text"
           value={newTaskTitle}
-          onChange={e => setNewTaskTitle(e.target.value)}
-          placeholder="Add a task..."
+          onChange={e => { setNewTaskTitle(e.target.value); if (!e.target.value.trim()) setAiSuggest(null) }}
+          onKeyDown={e => {
+            if (e.key === 'Escape') { setAiSuggest(null) }
+            if (e.key === 'Tab' && newTaskTitle.trim()) {
+              e.preventDefault()
+              triggerAISubtasks()
+            }
+          }}
+          placeholder="Taak toevoegen... (Tab voor AI-subtaken)"
           className="flex-1 text-[13px] text-charcoal placeholder:text-stone/30
             bg-transparent border-none outline-none py-1.5"
         />
+        {newTaskTitle.trim() && (
+          <button
+            type="button"
+            onClick={triggerAISubtasks}
+            disabled={aiSuggest?.phase === 'loading'}
+            title="AI: splits in subtaken (Tab)"
+            className={`flex-shrink-0 transition-colors
+              ${aiSuggest?.phase === 'loading'
+                ? 'text-amber-400 cursor-wait'
+                : 'text-stone/25 hover:text-amber-600'}`}
+          >
+            <Sparkles size={13} />
+          </button>
+        )}
       </form>
+
+      {/* AI subtask suggestion inline preview */}
+      {aiSuggest && (
+        <div className="ml-[26px] mb-3 rounded-[8px] border border-amber-200 bg-amber-50/40 p-2.5">
+          {aiSuggest.phase === 'loading' ? (
+            <div className="flex items-center gap-1.5 text-[11px] text-stone/50 py-0.5">
+              <RefreshCw size={10} className="animate-spin text-amber-500" />
+              AI genereert subtaken...
+            </div>
+          ) : (
+            <>
+              {aiSuggest.newTitle && aiSuggest.newTitle !== newTaskTitle && (
+                <div className="text-[11px] text-stone/50 mb-2 flex items-start gap-1.5">
+                  <span className="shrink-0 mt-0.5">→</span>
+                  <span className="italic">{aiSuggest.newTitle}</span>
+                </div>
+              )}
+              <div className="space-y-1 mb-2.5">
+                {aiSuggest.subtasks.map((s, i) => (
+                  <label
+                    key={i}
+                    className="flex items-start gap-2 cursor-pointer group/ai"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleAiSubtask(i)}
+                      className={`mt-0.5 w-3.5 h-3.5 rounded-[3px] border flex items-center justify-center flex-shrink-0 transition-colors
+                        ${s.checked ? 'bg-amber-500 border-amber-500' : 'border-stone/30 hover:border-stone/50'}`}
+                    >
+                      {s.checked && <Check size={9} className="text-white" />}
+                    </button>
+                    <span className={`text-[12px] transition-colors ${s.checked ? 'text-charcoal/80' : 'text-stone/40 line-through'}`}>
+                      {s.title}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={commitWithAI}
+                  disabled={!aiSuggest.subtasks.some(s => s.checked)}
+                  className="text-[11px] font-medium text-charcoal hover:text-charcoal/70 transition-colors
+                    disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  Voeg {aiSuggest.subtasks.filter(s => s.checked).length} subtaken toe ↵
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { addTask(newTaskTitle.trim(), project.id); setNewTaskTitle(''); setAiSuggest(null) }}
+                  className="text-[11px] text-stone/50 hover:text-stone/70 transition-colors"
+                >
+                  Zonder subtaken
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAiSuggest(null)}
+                  className="ml-auto text-stone/30 hover:text-stone/60 transition-colors"
+                >
+                  <X size={11} />
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {project.tasks.length === 0 && (
         <div className="text-[13px] text-stone/40 py-2 mb-2">

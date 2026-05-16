@@ -1,5 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { Plus, Trash2, GripVertical, ChevronRight, X } from 'lucide-react'
+import { Plus, Trash2, GripVertical, ChevronRight, X, Sparkles } from 'lucide-react'
+import { MakeActionablePanel } from './MakeActionablePanel'
+import { MakeActionableBulkPanel } from './MakeActionableBulkPanel'
 import {
   DndContext,
   closestCenter,
@@ -167,6 +169,7 @@ function SortableTaskRow({
   onToggle,
   onDelete,
   onRename,
+  onMakeActionable,
 }: {
   task: Task
   color: string
@@ -174,6 +177,7 @@ function SortableTaskRow({
   onToggle: () => void
   onDelete: () => void
   onRename: (title: string) => void
+  onMakeActionable: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const {
@@ -210,6 +214,13 @@ function SortableTaskRow({
         />
         <InlineTitle value={task.title} isDone={task.status === 'done'} onSave={onRename} />
         <SubtaskChip task={task} expanded={expanded} onToggle={() => setExpanded(e => !e)} />
+        <button
+          onClick={onMakeActionable}
+          title="Maak actionable (AI)"
+          className="opacity-0 group-hover:opacity-60 hover:!opacity-100 text-stone hover:text-amber-600 transition-all"
+        >
+          <Sparkles size={13} />
+        </button>
         <button
           onClick={onDelete}
           className="opacity-0 group-hover:opacity-60 hover:!opacity-100 text-stone hover:text-red transition-all"
@@ -273,6 +284,8 @@ export function ProjectModalTasks({ project }: ProjectModalTasksProps) {
 
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [showAllDone, setShowAllDone] = useState(false)
+  const [actionableTaskId, setActionableTaskId] = useState<string | null>(null)
+  const [bulkPanelOpen, setBulkPanelOpen] = useState(false)
 
   const DONE_VISIBLE = 5
 
@@ -330,9 +343,23 @@ export function ProjectModalTasks({ project }: ProjectModalTasksProps) {
   return (
     <div className="mt-1 pt-4 border-t border-border">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-[11px] uppercase tracking-[0.08em] text-stone font-medium">
-          Tasks
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-[11px] uppercase tracking-[0.08em] text-stone font-medium">
+            Tasks
+          </span>
+          {activeTasks.length > 0 && (
+            <button
+              onClick={() => setBulkPanelOpen(true)}
+              title="Maak alle actieve taken actionable (AI)"
+              className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.06em]
+                text-stone/60 hover:text-amber-700 px-1.5 py-0.5 rounded border border-transparent
+                hover:border-amber-200 hover:bg-amber-50/60 transition-all"
+            >
+              <Sparkles size={11} />
+              Maak {activeTasks.length} actionable
+            </button>
+          )}
+        </div>
         {totalTasks > 0 && (
           <span className="text-[11px] text-stone">
             {doneTasks.length} of {totalTasks} done
@@ -371,6 +398,7 @@ export function ProjectModalTasks({ project }: ProjectModalTasksProps) {
               onToggle={() => handleToggleTask(task.id)}
               onDelete={() => deleteTask(task.id, project.id)}
               onRename={(title) => updateTask(task.id, project.id, { title })}
+              onMakeActionable={() => setActionableTaskId(task.id)}
             />
           ))}
         </SortableContext>
@@ -402,6 +430,25 @@ export function ProjectModalTasks({ project }: ProjectModalTasksProps) {
             </button>
           )}
         </>
+      )}
+
+      {/* AI Make-Actionable panels */}
+      {actionableTaskId && (() => {
+        const t = project.tasks.find(t => t.id === actionableTaskId)
+        if (!t) return null
+        return (
+          <MakeActionablePanel
+            task={t}
+            project={project}
+            onClose={() => setActionableTaskId(null)}
+          />
+        )
+      })()}
+      {bulkPanelOpen && (
+        <MakeActionableBulkPanel
+          project={project}
+          onClose={() => setBulkPanelOpen(false)}
+        />
       )}
     </div>
   )

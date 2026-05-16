@@ -72,10 +72,25 @@ export interface Task {
   kanbanColumn?: ProjectStatus  // which kanban column this orphan task appears in
   waitingOn?: WaitingOn[]       // waiting-on entries (same as Project)
   nextAction?: string           // the immediate next physical action to move this forward
+  actionableChannel?: string    // AI-suggested channel: 'Slack' | 'Gmail' | 'Boat Local admin' | 'phone' | ...
+  actionableDraft?: string      // AI-suggested concept-message ready to copy-paste
   subtasks?: Subtask[]
   createdAt: string
   completedAt?: string
   lastCompletedDate?: string  // YYYY-MM-DD — last date this recurring task was checked off
+}
+
+// AI "Make Actionable" feedback log entry
+export interface AIFeedbackEntry {
+  id: string
+  taskId: string
+  projectId?: string
+  original: string             // original task title
+  suggested: string            // AI's suggested rewrite (concrete title or first subtask)
+  channel?: string             // AI's suggested channel
+  outcome: 'accepted' | 'edited' | 'rejected'
+  userVersion?: string         // if edited: the final user-kept text
+  createdAt: string            // ISO
 }
 
 export interface AgendaItem {
@@ -250,7 +265,11 @@ export interface Settings {
   planningTime: 'evening' | 'morning'
   contexts: WorkContext[]
   inProgressLimitChangeLog: string[] // ISO dates of each limit change (for friction UI)
+  userTools?: string[]               // channels the AI can suggest: Slack / Gmail / Boat Local admin / phone / ...
 }
+
+/** Default list of channels used by the "Make Actionable" AI when settings.userTools is empty. */
+export const DEFAULT_USER_TOOLS: string[] = ['Slack', 'Gmail', 'Boat Local admin', 'phone']
 
 // Kanban column definitions (done projects live in DoneListColumn, not a drag column)
 // Note: in_progress and waiting share a combined WIP limit from settings.inProgressLimit

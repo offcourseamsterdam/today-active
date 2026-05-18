@@ -19,7 +19,8 @@ type Result =
   | { taskId: string; type: 'alternatives'; alternatives: Array<{ title: string; channel?: string; draftMessage?: string }>; reasoning?: string }
 
 // edits map: taskId → overridden title / subtask titles
-type EditMap = Record<string, { newTitle?: string; subtasks?: string[] }>
+type EditEntry = { newTitle?: string; subtasks?: string[] }
+type EditMap = Record<string, EditEntry>
 
 export function MakeActionableBulkPanel({ project, onClose }: MakeActionableBulkPanelProps) {
   const updateTask = useStore(s => s.updateTask)
@@ -370,8 +371,6 @@ function ChannelChip({ channel }: { channel: string }) {
   )
 }
 
-interface EditMap { newTitle?: string; subtasks?: string[] }
-
 function InlineField({
   value,
   onChange,
@@ -425,7 +424,7 @@ function BulkResultPreview({
   onDeleteSubtask,
 }: {
   result: Result
-  editMap: EditMap | undefined
+  editMap: EditEntry | undefined
   onEditTitle: (title: string) => void
   onEditSubtask: (i: number, title: string) => void
   onDeleteSubtask: (i: number) => void

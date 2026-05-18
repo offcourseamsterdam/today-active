@@ -53,7 +53,6 @@ SPA routing: `vercel.json` rewrites `/p/:path*` → `/index.html` for shared-pro
 ## Gotchas
 
 - **Vercel team name ≠ GitHub org name** (see Deploy section). Don't suggest `--scope offcourseamsterdam`.
-- **GitHub repo is `today-active`** — was renamed from `today`. Local git remote should point to `today-active.git`.
 - **Dev API plugin loads all env vars, not just `VITE_*`** — don't add fallback logic in `api/*.ts` for "missing in dev".
 - **No `vercel dev` needed** locally — the custom Vite plugin handles it.
 - **Worktree limitation** — `vercel` CLI in `.claude/worktrees/*` won't find `.vercel/project.json`. Switch to the main project dir.

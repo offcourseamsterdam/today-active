@@ -7,17 +7,12 @@ import { useTodayPlan } from '../../hooks/useTodayPlan'
 import { useTaskToggle } from '../../hooks/useTaskToggle'
 import { ProjectTaskPreview } from '../ui/ProjectTaskPreview'
 import { TaskItem } from '../ui/TaskItem'
-import { getFocusTimeLabel } from '../../lib/focusTime'
-import type { PomodoroLogEntry } from '../../types'
-
-const EMPTY_LOG: PomodoroLogEntry[] = []
 
 interface ShortTasksProps {
-  onEnterCitadel?: (ctx: { tier: 'short'; taskId: string; taskTitle: string; projectTitle?: string; projectId?: string }) => void
   onOpenMeetings?: () => void
 }
 
-export function ShortTasks({ onEnterCitadel, onOpenMeetings }: ShortTasksProps) {
+export function ShortTasks({ onOpenMeetings }: ShortTasksProps) {
   const projects = useStore(s => s.projects)
   const orphanTasks = useStore(s => s.orphanTasks)
   const moveOrphanTaskToProject = useStore(s => s.moveOrphanTaskToProject)
@@ -31,8 +26,6 @@ export function ShortTasks({ onEnterCitadel, onOpenMeetings }: ShortTasksProps) 
   } = useTodayPlan()
   const showToast = useStore(s => s.showToast)
   const toggleTask = useTaskToggle(showToast)
-  const inlineTimer = useStore(s => s.inlineTimer)
-  const pomodoroLog = useStore(s => s.dailyPlan?.pomodoroLog) ?? EMPTY_LOG
 
 
   // Resolve short meeting IDs to objects, sorted by time
@@ -130,33 +123,6 @@ export function ShortTasks({ onEnterCitadel, onOpenMeetings }: ShortTasksProps) 
                 onAssignProject={(projectId) => moveOrphanTaskToProject(taskId, projectId)}
                 onOpenProject={setOpenProjectId}
               />
-              {onEnterCitadel && (() => {
-                const info = getFocusTimeLabel(taskId, inlineTimer, pomodoroLog)
-                return (
-                  <button
-                    onClick={() => {
-                      const projectId = projects.find(p => p.tasks.some(t => t.id === taskId))?.id
-                      onEnterCitadel({
-                        tier: 'short',
-                        taskId,
-                        taskTitle: found.task.title,
-                        projectTitle: found.projectTitle,
-                        projectId,
-                      })
-                    }}
-                    title="Start focus session"
-                    className={`text-[10px] whitespace-nowrap transition-all flex-shrink-0 ${
-                      info.isComplete
-                        ? 'text-cat-marketing/60'
-                        : info.isActive
-                          ? 'text-cat-marketing font-medium'
-                          : 'opacity-0 group-hover:opacity-60 hover:!opacity-100 text-stone'
-                    }`}
-                  >
-                    {info.label}
-                  </button>
-                )
-              })()}
             </div>
           )
         })}

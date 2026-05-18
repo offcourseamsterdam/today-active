@@ -182,7 +182,6 @@ export interface DailyPlan {
   shortMeetingIds?: string[]       // meetings assigned to short three
   maintenanceMeetingIds?: string[] // meetings assigned to maintenance
   calendarEvents?: AssignedCalendarEvent[]
-  pomodoroLog?: PomodoroLogEntry[]
   blockOrder?: Array<'deep' | 'short' | 'maintenance'>
   itemOrder?: PlanItem[]
   completedItemIds?: string[]  // plan item IDs marked "done for the day" (visual only)
@@ -217,34 +216,6 @@ export interface PlanItem {
   tier: 'deep' | 'short' | 'maintenance'
 }
 
-// Pomodoro tiers
-export type PlanTier = 'deep' | 'short' | 'maintenance'
-
-export interface PomodoroLogEntry {
-  taskId: string
-  tier: PlanTier
-  sessionsCompleted: number
-  totalMinutesWorked: number
-}
-
-export type InlineTimerMode = 'short' | 'long'
-
-export interface InlineTimerState {
-  mode: InlineTimerMode
-  secondsLeft: number
-  isRunning: boolean
-  isBreak: boolean
-  sessionsCompleted: number
-  linkedItemId?: string
-  linkedItemTitle?: string
-  linkedProjectTitle?: string
-  linkedProjectId?: string
-  startedAt: string
-  lastTickAt: string
-  workMinutes: number
-  breakMinutes: number
-}
-
 export interface LifeWeeks {
   birthDate: string
   weeksLived: number
@@ -259,8 +230,6 @@ export interface WorkContext {
 
 export interface Settings {
   inProgressLimit: number
-  pomodoroMinutes: number
-  breakMinutes: number
   birthDate?: string
   planningTime: 'evening' | 'morning'
   contexts: WorkContext[]

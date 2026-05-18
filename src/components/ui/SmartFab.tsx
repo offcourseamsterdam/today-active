@@ -30,7 +30,6 @@ export function SmartFab({
 }: SmartFabProps) {
   const dailyPlan = useStore(s => s.dailyPlan)
   const tomorrowPlan = useStore(s => s.tomorrowPlan)
-  const inlineTimer = useStore(s => s.inlineTimer)
   const meetingSession = useStore(s => s.meetingSession)
   const meetings = useStore(s => s.meetings)
   const recurringMeetings = useStore(s => s.recurringMeetings)
@@ -49,10 +48,6 @@ export function SmartFab({
   const isTomorrowPlanned = !!(tomorrowPlan?.isComplete)
   const isAfterThree = hour >= 15
 
-  const focusLabel = inlineTimer?.isRunning
-    ? `${inlineTimer.linkedItemTitle ?? 'Timer'} · Focus active`
-    : null
-
   const activeMeeting = meetingSession
     ? [...meetings, ...recurringMeetings].find(m => m.id === meetingSession.meetingId)
     : null
@@ -60,14 +55,11 @@ export function SmartFab({
     ? `${activeMeeting.title} · Back to agenda`
     : null
 
-  const label = focusLabel
-    ?? meetingLabel
+  const label = meetingLabel
     ?? (!isPlanned ? 'Plan today' : isAfterThree && !isTomorrowPlanned ? 'Plan tomorrow?' : null)
 
   function handlePrimaryClick() {
-    if (focusLabel) {
-      // Timer is running — no overlay to show, just scroll to timer
-    } else if (meetingLabel) {
+    if (meetingLabel) {
       onBackToMeeting()
     } else if (label === 'Plan today') {
       onPlanToday()
@@ -79,9 +71,7 @@ export function SmartFab({
   }
 
   function handleFabClick() {
-    if (focusLabel) {
-      // Timer is running inline — no action needed
-    } else if (label === 'Plan today') {
+    if (label === 'Plan today') {
       onPlanToday()
     } else if (label === 'Plan tomorrow?') {
       onPlanTomorrow()
@@ -149,14 +139,9 @@ export function SmartFab({
               hover:shadow-[0_4px_28px_rgba(42,39,36,0.15)]
               hover:border-stone/30
               transition-all duration-200
-              ${focusLabel || meetingLabel ? 'animate-pulse-focus' : 'animate-pulse-label'}`}
+              ${meetingLabel ? 'animate-pulse-focus' : 'animate-pulse-label'}`}
           >
-            {focusLabel ? (
-              <>
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-focus-dot shrink-0" />
-                <span className="text-[12px] font-medium text-charcoal max-w-[calc(100vw-96px)] truncate">{label}</span>
-              </>
-            ) : meetingLabel ? (
+            {meetingLabel ? (
               <>
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-focus-dot shrink-0" />
                 <span className="text-[12px] font-medium text-charcoal max-w-[calc(100vw-96px)] truncate">{label}</span>

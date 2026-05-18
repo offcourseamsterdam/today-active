@@ -1,5 +1,5 @@
 import { v4 as uuid } from 'uuid'
-import type { DailyPlan, Task, PlanTier, PomodoroLogEntry, PlanItem } from '../types'
+import type { DailyPlan, Task, PlanItem } from '../types'
 import type { StoreSet, StoreGet } from './types'
 import { ensureTodayPlan, ensureTomorrowPlan, getTodayString, makePlanActions } from './helpers'
 
@@ -150,26 +150,6 @@ export function makeDailyPlanActions(set: StoreSet, get: StoreGet) {
 
     clearTomorrowPlan: () => {
       set({ tomorrowPlan: null })
-    },
-
-    logPomodoroSession: (taskId: string, tier: PlanTier, minutesWorked: number) => {
-      const state = get()
-      const plan = ensureTodayPlan(state)
-      const log = plan.pomodoroLog ?? []
-      const existing = log.find(e => e.taskId === taskId)
-
-      let updatedLog: PomodoroLogEntry[]
-      if (existing) {
-        updatedLog = log.map(e =>
-          e.taskId === taskId
-            ? { ...e, sessionsCompleted: e.sessionsCompleted + 1, totalMinutesWorked: e.totalMinutesWorked + minutesWorked }
-            : e,
-        )
-      } else {
-        updatedLog = [...log, { taskId, tier, sessionsCompleted: 1, totalMinutesWorked: minutesWorked }]
-      }
-
-      set({ dailyPlan: { ...plan, pomodoroLog: updatedLog } })
     },
 
     togglePlanItemCompletion: (itemId: string) => {

@@ -42,8 +42,6 @@ function App() {
   const greetedDate = useStore(s => s.greetedDate)
   const setGreetedDate = useStore(s => s.setGreetedDate)
   const dailyPlan = useStore(s => s.dailyPlan)
-  const inlineTimer = useStore(s => s.inlineTimer)
-  const tickInlineTimer = useStore(s => s.tickInlineTimer)
   const meetingSession = useStore(s => s.meetingSession)
   const setLiveMeetingOpen = useStore(s => s.setLiveMeetingOpen)
   const tickMeetingSession = useStore(s => s.tickMeetingSession)
@@ -76,15 +74,6 @@ function App() {
   useEffect(() => {
     refreshDailyPlan()
   }, [todayStr, refreshDailyPlan])
-
-  // Global inline timer tick — runs while timer is active
-  useEffect(() => {
-    if (!inlineTimer?.isRunning) return
-    const id = setInterval(() => tickInlineTimer(), 1000)
-    return () => clearInterval(id)
-  }, [inlineTimer?.isRunning, tickInlineTimer])
-
-  const isDarkMode = !!inlineTimer?.isRunning
 
   // Global meeting session tick
   useEffect(() => {
@@ -138,7 +127,7 @@ function App() {
   }
 
   return (
-    <div className={`min-h-screen overflow-x-hidden transition-colors duration-500 ${isDarkMode ? 'bg-citadel-bg' : 'bg-canvas'}`}>
+    <div className="min-h-screen overflow-x-hidden bg-canvas">
       {/* Header */}
       <header className="max-w-[1400px] mx-auto px-4 pt-5 pb-4 sm:px-6 sm:pt-8 sm:pb-6 flex justify-between items-start">
         <div className="flex items-center gap-3">
@@ -217,7 +206,7 @@ function App() {
       </>
 
       {/* Wind-down banner — after 4 PM, no active sessions */}
-      {hour >= 16 && !inlineTimer?.isRunning && !meetingSession && !dailyPlan?.isComplete && (
+      {hour >= 16 && !meetingSession && !dailyPlan?.isComplete && (
         <WindDownBanner onEnough={() => setShowEnough(true)} />
       )}
 
@@ -253,8 +242,8 @@ function App() {
       <Toast />
 
       {/* Main content */}
-      <VandaagDarkContext.Provider value={isDarkMode}>
-      <main className={`px-4 pb-28 sm:px-6 sm:pb-12 transition-colors duration-500 ${isDarkMode ? 'bg-citadel-bg' : ''}`}>
+      <VandaagDarkContext.Provider value={false}>
+      <main className="px-4 pb-28 sm:px-6 sm:pb-12">
         {activeView === 'philosophy' ? (
           <Suspense fallback={null}><PhilosophyPage onBack={() => setActiveView('vandaag')} /></Suspense>
         ) : activeView === 'planning' ? (

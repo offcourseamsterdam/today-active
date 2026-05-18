@@ -4,8 +4,6 @@ import type { VandaagState, StoreGet } from './types'
 
 export const defaultSettings: Settings = {
   inProgressLimit: 5,
-  pomodoroMinutes: 25,
-  breakMinutes: 5,
   planningTime: 'evening',
   contexts: [],
   inProgressLimitChangeLog: [],

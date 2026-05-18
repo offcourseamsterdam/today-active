@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react'
 import { ChevronDown, ChevronUp, Clock } from 'lucide-react'
 import { useStore } from '../../store'
 import { DailyPlanList } from './DailyPlanList'
-import { InlinePomodoroTimer } from './InlinePomodoroTimer'
-import { MiniTimerBar } from './MiniTimerBar'
 import { getTodayQuote } from '../../lib/quotes'
 import { useVandaagDark } from './VandaagDarkContext'
 
@@ -168,54 +166,43 @@ export function VandaagView({ onDayDone, collapsed, onToggleCollapse, onPeekTomo
         </div>
       )}
 
-      {/* Expanded: two-column layout */}
+      {/* Expanded: plan list + stats + quote */}
       {!collapsed && (
-        <div className="flex flex-col lg:flex-row gap-6">
-          {/* Left column: plan list + stats + quote */}
-          <div className="flex-1 min-w-0">
-            <DailyPlanList onOpenMeetings={onOpenMeetings} />
+        <div>
+          <DailyPlanList onOpenMeetings={onOpenMeetings} />
 
-            {/* Stats */}
-            {missionCriticalDays > 0 && (
-              <div className="mt-3 flex items-center gap-5 px-1">
-                <span className={`text-[11px] ${dark ? 'text-citadel-text/30' : 'text-stone/50'}`}>
-                  Mission critical: <span className={dark ? 'text-citadel-text/50' : 'text-stone'}>{missionCriticalDays} days worked</span>
-                </span>
-              </div>
-            )}
-
-            {/* Quote + day done */}
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
-              <div className={`p-3 rounded-[8px] max-w-[460px] ${dark ? 'bg-citadel-text/5' : 'bg-border-light/40'}`}>
-                <p className={`text-[11px] italic font-serif leading-relaxed ${dark ? 'text-citadel-text/40' : 'text-[#5A5550]'}`}>
-                  &ldquo;{quote.text}&rdquo;
-                </p>
-                <p className={`text-[10px] mt-1 ${dark ? 'text-citadel-text/20' : 'text-stone/50'}`}>
-                  Oliver Burkeman{quote.source && <> &mdash; {quote.source}</>}
-                </p>
-              </div>
-
-              {tiersActive > 0 && (
-                <button
-                  onClick={onDayDone}
-                  className={`text-[13px] transition-colors font-serif italic whitespace-nowrap pb-1
-                    ${dark ? 'text-citadel-text/40 hover:text-citadel-text' : 'text-[#7A746A] hover:text-charcoal'}`}
-                >
-                  That&rsquo;s enough for today &rarr;
-                </button>
-              )}
+          {/* Stats */}
+          {missionCriticalDays > 0 && (
+            <div className="mt-3 flex items-center gap-5 px-1">
+              <span className={`text-[11px] ${dark ? 'text-citadel-text/30' : 'text-stone/50'}`}>
+                Mission critical: <span className={dark ? 'text-citadel-text/50' : 'text-stone'}>{missionCriticalDays} days worked</span>
+              </span>
             </div>
-          </div>
+          )}
 
-          {/* Right column: inline timer (desktop only) */}
-          <div className="hidden lg:block w-[320px] flex-shrink-0 sticky top-4 self-start">
-            <InlinePomodoroTimer />
+          {/* Quote + day done */}
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
+            <div className={`p-3 rounded-[8px] max-w-[460px] ${dark ? 'bg-citadel-text/5' : 'bg-border-light/40'}`}>
+              <p className={`text-[11px] italic font-serif leading-relaxed ${dark ? 'text-citadel-text/40' : 'text-[#5A5550]'}`}>
+                &ldquo;{quote.text}&rdquo;
+              </p>
+              <p className={`text-[10px] mt-1 ${dark ? 'text-citadel-text/20' : 'text-stone/50'}`}>
+                Oliver Burkeman{quote.source && <> &mdash; {quote.source}</>}
+              </p>
+            </div>
+
+            {tiersActive > 0 && (
+              <button
+                onClick={onDayDone}
+                className={`text-[13px] transition-colors font-serif italic whitespace-nowrap pb-1
+                  ${dark ? 'text-citadel-text/40 hover:text-citadel-text' : 'text-[#7A746A] hover:text-charcoal'}`}
+              >
+                That&rsquo;s enough for today &rarr;
+              </button>
+            )}
           </div>
         </div>
       )}
-
-      {/* Mobile mini timer bar */}
-      <MiniTimerBar />
     </div>
   )
 }

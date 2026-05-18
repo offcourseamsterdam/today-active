@@ -8,17 +8,12 @@ import { useTodayPlan } from '../../hooks/useTodayPlan'
 import { getTodayString } from '../../store/helpers'
 import { TaskCheckbox } from '../ui/TaskCheckbox'
 import { ProjectTaskPreview } from '../ui/ProjectTaskPreview'
-import { getFocusTimeLabel } from '../../lib/focusTime'
-import type { PomodoroLogEntry } from '../../types'
-
-const EMPTY_LOG: PomodoroLogEntry[] = []
 
 interface MaintenanceTierProps {
-  onEnterCitadel?: (ctx: { tier: 'maintenance'; taskId: string; taskTitle: string }) => void
   onOpenMeetings?: () => void
 }
 
-export function MaintenanceTier({ onEnterCitadel, onOpenMeetings }: MaintenanceTierProps) {
+export function MaintenanceTier({ onOpenMeetings }: MaintenanceTierProps) {
   const projects = useStore(s => s.projects)
   const orphanTasks = useStore(s => s.orphanTasks)
   const recurringTasks = useStore(s => s.recurringTasks)
@@ -27,8 +22,6 @@ export function MaintenanceTier({ onEnterCitadel, onOpenMeetings }: MaintenanceT
   const updateOrphanTask = useStore(s => s.updateOrphanTask)
   const updateRecurringTask = useStore(s => s.updateRecurringTask)
   const getTodayRecurringTasks = useStore(s => s.getTodayRecurringTasks)
-  const inlineTimer = useStore(s => s.inlineTimer)
-  const pomodoroLog = useStore(s => s.dailyPlan?.pomodoroLog) ?? EMPTY_LOG
   const {
     maintenanceTaskIds, addMaintenanceTask, removeMaintenanceTask,
     maintenanceProjectIds, removeMaintenanceProject,
@@ -171,24 +164,6 @@ export function MaintenanceTier({ onEnterCitadel, onOpenMeetings }: MaintenanceT
                   ? <RotateCcw size={10} className="text-stone/25 flex-shrink-0" />
                   : null
               }
-              {onEnterCitadel && (() => {
-                const info = getFocusTimeLabel(taskId, inlineTimer, pomodoroLog)
-                return (
-                  <button
-                    onClick={() => onEnterCitadel({ tier: 'maintenance', taskId, taskTitle: task.title })}
-                    title="Start focus session"
-                    className={`text-[10px] whitespace-nowrap transition-all flex-shrink-0 ${
-                      info.isComplete
-                        ? 'text-cat-marketing/60'
-                        : info.isActive
-                          ? 'text-cat-marketing font-medium'
-                          : 'opacity-0 group-hover:opacity-60 hover:!opacity-100 text-stone'
-                    }`}
-                  >
-                    {info.label}
-                  </button>
-                )
-              })()}
               <button
                 onClick={() => removeMaintenanceTask(taskId)}
                 className="opacity-0 group-hover:opacity-60 hover:!opacity-100 text-stone transition-all"

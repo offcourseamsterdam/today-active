@@ -1,14 +1,13 @@
 import { useState } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical, X, Clock, Play } from 'lucide-react'
+import { GripVertical, X, Clock } from 'lucide-react'
 import { useStore } from '../../store'
 import { CATEGORY_CONFIG } from '../../types'
 import type { PlanItem, TaskType } from '../../types'
 import { findTaskById } from '../../lib/taskLookup'
 import { TaskCheckbox } from '../ui/TaskCheckbox'
 import { TierBadge } from '../planning/TierBadge'
-import { getFocusTimeLabel } from '../../lib/focusTime'
 import { MeetingInlineCard } from '../meetings/MeetingInlineCard'
 import { useVandaagDark } from './VandaagDarkContext'
 
@@ -29,9 +28,6 @@ export function SortableVandaagItem({
   const meetings = useStore(s => s.meetings)
   const recurringMeetings = useStore(s => s.recurringMeetings)
   const setOpenProjectId = useStore(s => s.setOpenProjectId)
-  const inlineTimer = useStore(s => s.inlineTimer)
-  const startInlineTimer = useStore(s => s.startInlineTimer)
-  const pomodoroLog = useStore(s => s.dailyPlan?.pomodoroLog) ?? []
   const completedItemIds = useStore(s => s.dailyPlan?.completedItemIds) ?? []
   const togglePlanItemCompletion = useStore(s => s.togglePlanItemCompletion)
   const dark = useVandaagDark()
@@ -56,20 +52,6 @@ export function SortableVandaagItem({
 
   const isDeep = item.tier === 'deep'
   const isItemCompleted = completedItemIds.includes(item.id)
-  const isActiveTimerItem = inlineTimer?.linkedItemId === item.id
-
-  // Focus time info (for tasks and projects)
-  const focusInfo = (item.type === 'task' || item.type === 'project')
-    ? getFocusTimeLabel(item.id, inlineTimer, pomodoroLog)
-    : null
-
-  function handleStartTimer() {
-    if (item.type === 'project' && project) {
-      startInlineTimer('short', item.id, project.title, project.title, project.id)
-    } else if (item.type === 'task' && taskResult) {
-      startInlineTimer('short', item.id, taskResult.task.title, taskResult.projectTitle, taskResult.task.projectId)
-    }
-  }
 
   return (
     <div
@@ -78,13 +60,9 @@ export function SortableVandaagItem({
       {...attributes}
       className={`rounded-[8px] border transition-all duration-300 group
         ${isDragging ? 'shadow-lg scale-[1.02] z-10 opacity-80' : ''}
-        ${isActiveTimerItem
-          ? dark
-            ? 'border-citadel-accent/30 bg-citadel-accent/5'
-            : 'border-indigo-200 bg-indigo-50/50'
-          : dark
-            ? 'bg-citadel-text/[0.03] border-citadel-text/8'
-            : `bg-card border-border/50 ${isDeep ? 'border-charcoal/15' : ''}`
+        ${dark
+          ? 'bg-citadel-text/[0.03] border-citadel-text/8'
+          : `bg-card border-border/50 ${isDeep ? 'border-charcoal/15' : ''}`
         }`}
     >
       <div className="flex items-center gap-2 px-3 py-2.5">
@@ -175,25 +153,6 @@ export function SortableVandaagItem({
               {meeting.durationMinutes < 60 ? `${meeting.durationMinutes}m` : `${meeting.durationMinutes / 60}h`}
             </span>
           </button>
-        )}
-
-        {/* Focus time / play button */}
-        {focusInfo && !focusInfo.isComplete && (
-          <button
-            onClick={handleStartTimer}
-            className={`flex items-center gap-1 text-[10px] flex-shrink-0 transition-all rounded-full px-2 py-0.5
-              ${focusInfo.isActive
-                ? dark
-                  ? 'bg-citadel-accent/20 text-citadel-accent'
-                  : 'bg-indigo-100 text-indigo-700'
-                : `opacity-0 group-hover:opacity-60 ${dark ? 'text-citadel-text/40 hover:text-citadel-text hover:bg-citadel-text/10' : 'text-stone/50 hover:text-charcoal hover:bg-border/50'}`}`}
-          >
-            <Play size={8} />
-            <span className="hidden sm:inline">{focusInfo.isActive ? focusInfo.label : 'Focus'}</span>
-          </button>
-        )}
-        {focusInfo?.isComplete && (
-          <span className={`text-[10px] flex-shrink-0 ${dark ? 'text-citadel-accent/50' : 'text-green-600/60'}`}>✓ Done</span>
         )}
 
         {/* Remove button */}

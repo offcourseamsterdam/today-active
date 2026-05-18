@@ -4,18 +4,13 @@ import { useStore } from '../../store'
 import { CategoryBadge } from '../ui/CategoryBadge'
 import { findMeetingById } from '../../lib/meetingLookup'
 import { getTodayQuote } from '../../lib/quotes'
-import { getFocusTimeLabel } from '../../lib/focusTime'
 import { getTodayString } from '../../store/helpers'
-import type { PomodoroLogEntry } from '../../types'
-
-const EMPTY_LOG: PomodoroLogEntry[] = []
 
 interface DeepBlockProps {
-  onEnterCitadel: () => void
   onOpenMeetings?: () => void
 }
 
-export function DeepBlock({ onEnterCitadel, onOpenMeetings }: DeepBlockProps) {
+export function DeepBlock({ onOpenMeetings }: DeepBlockProps) {
   const projects = useStore(s => s.projects)
   const rawPlan = useStore(s => s.dailyPlan)
   const dailyPlan = rawPlan?.date === getTodayString() ? rawPlan : null
@@ -157,11 +152,6 @@ export function DeepBlock({ onEnterCitadel, onOpenMeetings }: DeepBlockProps) {
             </button>
           )}
 
-          {/* Focus time */}
-          <div className="pt-3 border-t border-border/50">
-            <FocusTimeButton projectId={selectedProject.id} onStartFocus={onEnterCitadel} />
-          </div>
-
           {/* Task preview */}
           {selectedProject.tasks.length > 0 && (
             <div className="mt-3 pt-3 border-t border-border/50">
@@ -266,24 +256,3 @@ function DeepBlockComplete({ projectTitle }: { projectTitle: string }) {
   )
 }
 
-function FocusTimeButton({ projectId, onStartFocus }: { projectId: string; onStartFocus: () => void }) {
-  const inlineTimer = useStore(s => s.inlineTimer)
-  const pomodoroLog = useStore(s => s.dailyPlan?.pomodoroLog) ?? EMPTY_LOG
-
-  const info = getFocusTimeLabel(projectId, inlineTimer, pomodoroLog)
-
-  return (
-    <button
-      onClick={onStartFocus}
-      className={`text-[11px] transition-colors ${
-        info.isComplete
-          ? 'text-cat-marketing/60 cursor-default'
-          : info.isActive
-            ? 'text-cat-marketing font-medium'
-            : 'text-stone/60 hover:text-charcoal'
-      }`}
-    >
-      {info.label}
-    </button>
-  )
-}

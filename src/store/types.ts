@@ -1,5 +1,5 @@
 import type { StoreApi } from 'zustand'
-import type { Project, Task, Meeting, MeetingNotes, AgendaItemNotes, AgendaItem, Settings, Category, ProjectStatus, DailyPlan, RecurrenceRule, CalendarEvent, PlanTier, InlineTimerState, InlineTimerMode, MeetingSession, PlanItem } from '../types'
+import type { Project, Task, Meeting, MeetingNotes, AgendaItemNotes, AgendaItem, Settings, Category, ProjectStatus, DailyPlan, RecurrenceRule, CalendarEvent, MeetingSession, PlanItem } from '../types'
 
 export interface ProjectDecision {
   decision: string
@@ -49,9 +49,6 @@ export interface VandaagState {
   greetedDate: string | null  // YYYY-MM-DD — last date the morning screen was dismissed
   artworkLoadingIds: string[]  // project IDs with in-flight artwork fetch (not persisted)
 
-  // Inline timer state
-  inlineTimer: InlineTimerState | null
-
   // Meeting session state
   meetingSession: MeetingSession | null
   processingMeetingId: string | null
@@ -60,16 +57,6 @@ export interface VandaagState {
   processingItemPhases: Record<string, 'transcribing' | 'summarizing'>
   processingItemErrors: Record<string, string>
   isLiveMeetingOpen: boolean
-
-  // Inline timer actions
-  startInlineTimer: (mode: InlineTimerMode, linkedItemId?: string, linkedItemTitle?: string, linkedProjectTitle?: string, linkedProjectId?: string) => void
-  stopInlineTimer: () => void
-  pauseInlineTimer: () => void
-  resumeInlineTimer: () => void
-  resetInlineTimer: () => void
-  skipInlineTimerPhase: () => void
-  setInlineTimerMode: (mode: InlineTimerMode) => void
-  tickInlineTimer: () => void
 
   // Plan item completion
   togglePlanItemCompletion: (itemId: string) => void
@@ -245,9 +232,6 @@ export interface VandaagState {
   fetchCalendarEvents: (accessToken: string, date: string) => Promise<void>
   setCalendarEvents: (events: CalendarEvent[]) => void
   clearCalendarEvents: () => void
-
-  // Pomodoro logging
-  logPomodoroSession: (taskId: string, tier: PlanTier, minutesWorked: number) => void
 
   // Personal rules
   addPersonalRule: (rule: string) => void

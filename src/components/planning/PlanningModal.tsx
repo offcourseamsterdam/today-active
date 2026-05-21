@@ -168,7 +168,6 @@ export function PlanningModal({ onClose, day = 'tomorrow' }: PlanningModalProps)
       if (planTier === 'deep') {
         const item = prev.find(i => i.id === id)
         if (item?.type === 'task') return prev // Tasks can't be deep
-        if (prev.filter(i => i.tier === 'deep' && i.id !== id).length >= 1) return prev
       }
       if (planTier === 'short') {
         const currentShort = prev.filter(i => i.tier === 'short' && i.id !== id)
@@ -419,7 +418,7 @@ export function PlanningModal({ onClose, day = 'tomorrow' }: PlanningModalProps)
               {/* Slot indicators */}
               <div className="flex items-center gap-4 text-[11px] text-[#7A746A]/60">
                 <span className={deepCount >= 1 ? 'text-indigo-500' : ''}>
-                  Deep: {deepCount}/1
+                  Deep: {deepCount}
                 </span>
                 <span className={shortSlots >= 3 ? 'text-amber-500' : ''}>
                   Short: {shortSlots}/3

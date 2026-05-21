@@ -473,8 +473,8 @@ export function PlanningModal({ onClose, day = 'tomorrow' }: PlanningModalProps)
                     <SortablePlanItem
                       key={item.id}
                       item={item}
-                      intention={item.tier === 'deep' ? intention : undefined}
-                      onIntentionChange={item.tier === 'deep' ? setIntention : undefined}
+                      intention={item.tier === 'deep' && item.id === activePlan?.deepBlock?.projectId ? intention : undefined}
+                      onIntentionChange={item.tier === 'deep' && item.id === activePlan?.deepBlock?.projectId ? setIntention : undefined}
                       onRemove={handleRemoveItem}
                       onTierChange={handleTierChange}
                     />

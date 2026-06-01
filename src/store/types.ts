@@ -1,5 +1,5 @@
 import type { StoreApi } from 'zustand'
-import type { Project, Task, Meeting, MeetingNotes, AgendaItemNotes, AgendaItem, Settings, Category, ProjectStatus, DailyPlan, RecurrenceRule, CalendarEvent, MeetingSession, PlanItem } from '../types'
+import type { Project, Task, Meeting, MeetingNotes, AgendaItemNotes, AgendaItem, Settings, Category, ProjectStatus, DailyPlan, RecurrenceRule, CalendarEvent, MeetingSession, PlanItem, WriteAwayEntry } from '../types'
 
 export interface ProjectDecision {
   decision: string
@@ -22,7 +22,7 @@ export interface RecentMeetingSummaryData {
   notesHash: string
 }
 
-export type ActiveView = 'vandaag' | 'kanban' | 'planning' | 'philosophy' | 'meetings' | 'review'
+export type ActiveView = 'vandaag' | 'kanban' | 'planning' | 'philosophy' | 'meetings' | 'review' | 'write-away'
 
 export interface VandaagState {
   // Data
@@ -35,6 +35,7 @@ export interface VandaagState {
   dailyPlan: DailyPlan | null
   tomorrowPlan: DailyPlan | null
   personalRules: string[]
+  writeAwayEntries: WriteAwayEntry[]
 
   // UI state
   openProjectId: string | null  // project modal open from any view

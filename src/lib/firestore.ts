@@ -1,7 +1,7 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { db } from './firebase'
 import { deepClean } from './utils'
-import type { Project, Task, Meeting, Settings, DailyPlan } from '../types'
+import type { Project, Task, Meeting, Settings, DailyPlan, WriteAwayEntry } from '../types'
 
 export interface SyncData {
   projects: Project[]
@@ -13,6 +13,7 @@ export interface SyncData {
   dailyPlan: DailyPlan | null
   tomorrowPlan: DailyPlan | null
   personalRules: string[]
+  writeAway: WriteAwayEntry[]
   syncedAt: string
 }
 

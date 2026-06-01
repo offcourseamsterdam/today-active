@@ -19,6 +19,7 @@ function extractSyncData(): SyncData {
     dailyPlan: s.dailyPlan,
     tomorrowPlan: s.tomorrowPlan,
     personalRules: s.personalRules,
+    writeAway: s.writeAwayEntries,
     syncedAt: new Date().toISOString(),
   }
 }
@@ -76,6 +77,7 @@ export function useFirestoreSync(user: User | null): SyncStatus {
               dailyPlan: remote.dailyPlan ?? null,
               tomorrowPlan: remote.tomorrowPlan ?? null,
               personalRules: remote.personalRules ?? [],
+              writeAwayEntries: remote.writeAway ?? [],
             })
           } else {
             // Local is newer (or same) → push local up to cloud

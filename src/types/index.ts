@@ -80,6 +80,15 @@ export interface Task {
   lastCompletedDate?: string  // YYYY-MM-DD — last date this recurring task was checked off
 }
 
+// Write Away — brain-dump capture entry
+export interface WriteAwayEntry {
+  id: string
+  text: string
+  tag: 'urgent-work' | 'work' | 'personal'
+  createdAt: string   // ISO timestamp
+  taskId?: string     // set when urgent-work auto-created an orphan task
+}
+
 // AI "Make Actionable" feedback log entry
 export interface AIFeedbackEntry {
   id: string

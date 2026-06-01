@@ -244,6 +244,7 @@ export interface Settings {
   contexts: WorkContext[]
   inProgressLimitChangeLog: string[] // ISO dates of each limit change (for friction UI)
   userTools?: string[]               // channels the AI can suggest: Slack / Gmail / Boat Local admin / phone / ...
+  writeAwaySecret?: string           // personal secret for the /api/write-away endpoint (Raycast integration)
 }
 
 /** Default list of channels used by the "Make Actionable" AI when settings.userTools is empty. */

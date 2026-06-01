@@ -76,6 +76,8 @@ function devApiPlugin(): Plugin {
             handler = await import('./api/make-actionable')
           } else if (route === 'health') {
             handler = await import('./api/health')
+          } else if (route === 'write-away') {
+            handler = await import('./api/write-away')
           } else {
             res.writeHead(404)
             res.end('Not found')

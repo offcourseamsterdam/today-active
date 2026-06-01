@@ -243,6 +243,12 @@ export interface VandaagState {
   updateSettings: (updates: Partial<Settings>) => void
   updateSettingsWithLimitTracking: (limit: number) => void
 
+  // Write Away actions
+  addWriteAwayEntry: (entry: Omit<WriteAwayEntry, 'id' | 'createdAt'>) => string
+  updateWriteAwayEntry: (id: string, updates: Partial<WriteAwayEntry>) => void
+  deleteWriteAwayEntry: (id: string) => void
+  setWriteAwayEntries: (entries: WriteAwayEntry[]) => void
+
   // Selectors
   getProjectsByStatus: (status: ProjectStatus) => Project[]
   getInProgressCount: () => number

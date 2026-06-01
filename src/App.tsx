@@ -17,6 +17,9 @@ import { TomorrowPeek } from './components/vandaag/TomorrowPeek'
 import { useStore } from './store'
 import { useAuth } from './hooks/useAuth'
 import { useFirestoreSync } from './hooks/useFirestoreSync'
+import { WriteAwayButton } from './components/writeaway/WriteAwayButton'
+import { WriteAwayPage } from './components/writeaway/WriteAwayPage'
+import { WriteAwayModal } from './components/writeaway/WriteAwayModal'
 
 // Lazy-loaded heavy components
 const PhilosophyPage = lazy(() => import('./components/philosophy/PhilosophyPage').then(m => ({ default: m.PhilosophyPage })))
@@ -30,6 +33,10 @@ function App() {
   // Shared project page — standalone route, no auth/store needed
   const shareMatch = useMemo(() => window.location.pathname.match(/^\/p\/([a-zA-Z0-9]+)/), [])
   if (shareMatch) return <SharedProjectPage shareId={shareMatch[1]} />
+
+  // /dump — minimal standalone Write Away capture page (no nav)
+  const isDumpRoute = useMemo(() => window.location.pathname === '/dump', [])
+  if (isDumpRoute) return <WriteAwayModal onClose={() => {}} standalone />
 
   const activeView = useStore(s => s.activeView)
   const setActiveView = useStore(s => s.setActiveView)
@@ -182,6 +189,15 @@ function App() {
           <ClipboardCheck size={14} />
           Review
         </button>
+        <button
+          onClick={() => setActiveView('write-away')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] text-[12px] font-medium tracking-[0.02em] transition-colors
+            ${activeView === 'write-away'
+              ? 'bg-charcoal text-[#FAF9F7]'
+              : 'text-stone/60 hover:text-charcoal hover:bg-border-light'}`}
+        >
+          Write Away
+        </button>
       </nav>
 
       {/* Tomorrow peek — slide-in drawer from the right */}
@@ -241,6 +257,9 @@ function App() {
       {/* Update-reminder toast */}
       <Toast />
 
+      {/* Floating Write Away button — visible on all in-app screens */}
+      <WriteAwayButton />
+
       {/* Main content */}
       <VandaagDarkContext.Provider value={false}>
       <main className="px-4 pb-28 sm:px-6 sm:pb-12">
@@ -252,6 +271,8 @@ function App() {
           <Suspense fallback={null}><MeetingsPage /></Suspense>
         ) : activeView === 'review' ? (
           <Suspense fallback={null}><WeeklyReviewPage /></Suspense>
+        ) : activeView === 'write-away' ? (
+          <WriteAwayPage />
         ) : (
           <>
             <VandaagView

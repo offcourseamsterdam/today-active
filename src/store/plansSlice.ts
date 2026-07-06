@@ -201,7 +201,7 @@ export function makeDailyPlanActions(set: StoreSet, get: StoreGet) {
     refreshDailyPlan: () => {
       const state = get()
       const today = getTodayString()
-      const allTasks = [...state.orphanTasks, ...state.recurringTasks]
+      const allTasks = [...(state.orphanTasks ?? []), ...(state.recurringTasks ?? [])]
 
       // 1. Try to promote tomorrow's plan first
       if (state.tomorrowPlan && state.tomorrowPlan.date === today) {

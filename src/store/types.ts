@@ -34,6 +34,8 @@ export interface VandaagState {
   settings: Settings
   dailyPlan: DailyPlan | null
   tomorrowPlan: DailyPlan | null
+  planHistory: Record<string, DailyPlan>
+  weekSlots: Record<string, string[]>
   personalRules: string[]
   writeAwayEntries: WriteAwayEntry[]
 
@@ -228,6 +230,15 @@ export interface VandaagState {
   clearTomorrowPlan: () => void
   loadTomorrowPlanIfReady: () => boolean
   refreshDailyPlan: () => void
+
+  // Plan history
+  archivePlan: (date: string, plan: DailyPlan) => void
+  getPlanForDate: (date: string) => DailyPlan | null
+
+  // Week slots
+  setWeekSlot: (date: string, projectIds: string[]) => void
+  addProjectToSlot: (date: string, projectId: string) => void
+  removeProjectFromSlot: (date: string, projectId: string) => void
 
   // Calendar actions
   fetchCalendarEvents: (accessToken: string, date: string) => Promise<void>

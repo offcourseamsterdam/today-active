@@ -77,6 +77,8 @@ export const useStore = create<VandaagState>()(
       settings: defaultSettings,
       dailyPlan: null,
       tomorrowPlan: null,
+      planHistory: {},
+      weekSlots: {},
       personalRules: [],
       writeAwayEntries: [],
       openProjectId: null,
@@ -138,6 +140,27 @@ export const useStore = create<VandaagState>()(
       setRecentMeetingSummary: (projectId, data) => set(s => ({
         recentMeetingSummaryCache: { ...s.recentMeetingSummaryCache, [projectId]: data }
       })),
+
+      // Plan history
+      archivePlan: (date, plan) => set(s => ({
+        planHistory: { ...s.planHistory, [date]: plan }
+      })),
+      getPlanForDate: (date) => get().planHistory[date] ?? null,
+
+      // Week slots
+      setWeekSlot: (date, projectIds) => set(s => ({
+        weekSlots: { ...s.weekSlots, [date]: projectIds }
+      })),
+      addProjectToSlot: (date, projectId) => set(s => {
+        const existing = s.weekSlots[date] ?? []
+        if (existing.includes(projectId)) return s
+        return { weekSlots: { ...s.weekSlots, [date]: [...existing, projectId] } }
+      }),
+      removeProjectFromSlot: (date, projectId) => set(s => {
+        const existing = s.weekSlots[date] ?? []
+        return { weekSlots: { ...s.weekSlots, [date]: existing.filter(id => id !== projectId) } }
+      }),
+
       saveMeetingNotes: (meetingId, notes) => {
         const { meetings, recurringMeetings } = get()
         const inMeetings = meetings.some(m => m.id === meetingId)
@@ -228,6 +251,8 @@ export const useStore = create<VandaagState>()(
         settings: state.settings,
         dailyPlan: state.dailyPlan,
         tomorrowPlan: state.tomorrowPlan,
+        planHistory: state.planHistory,
+        weekSlots: state.weekSlots,
         personalRules: state.personalRules,
         greetedDate: state.greetedDate,
         meetingSession: state.meetingSession,

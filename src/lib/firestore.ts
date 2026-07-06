@@ -12,6 +12,8 @@ export interface SyncData {
   settings: Settings
   dailyPlan: DailyPlan | null
   tomorrowPlan: DailyPlan | null
+  planHistory: Record<string, DailyPlan>
+  weekSlots: Record<string, string[]>
   personalRules: string[]
   writeAway: WriteAwayEntry[]
   syncedAt: string

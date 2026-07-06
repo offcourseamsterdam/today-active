@@ -3,6 +3,21 @@ import type { DailyPlan, Task, PlanItem } from '../types'
 import type { StoreSet, StoreGet } from './types'
 import { ensureTodayPlan, ensureTomorrowPlan, getTodayString, makePlanActions } from './helpers'
 
+function rolloverTasks(
+  plan: DailyPlan,
+  allTasks: readonly { id: string; status: string }[],
+): { shortTasks: string[]; maintenanceTasks: string[]; shortProjects: string[]; maintenanceProjects: string[] } {
+  const done = new Set(plan.completedItemIds ?? [])
+  const taskDone = (id: string) => done.has(id) || allTasks.find(t => t.id === id)?.status === 'done'
+
+  return {
+    shortTasks: plan.shortTasks.filter(id => !taskDone(id)),
+    maintenanceTasks: plan.maintenanceTasks.filter(id => !taskDone(id)),
+    shortProjects: plan.shortProjects.filter(id => !done.has(id)),
+    maintenanceProjects: plan.maintenanceProjects.filter(id => !done.has(id)),
+  }
+}
+
 export function makeDailyPlanActions(set: StoreSet, get: StoreGet) {
   const todayActions = makePlanActions(
     ensureTodayPlan,
@@ -186,9 +201,13 @@ export function makeDailyPlanActions(set: StoreSet, get: StoreGet) {
     refreshDailyPlan: () => {
       const state = get()
       const today = getTodayString()
+      const allTasks = [...state.orphanTasks, ...state.recurringTasks]
 
-      // Try to promote tomorrow's plan first
+      // 1. Try to promote tomorrow's plan first
       if (state.tomorrowPlan && state.tomorrowPlan.date === today) {
+        if (state.dailyPlan && state.dailyPlan.date !== today) {
+          set({ planHistory: { ...state.planHistory, [state.dailyPlan.date]: state.dailyPlan } })
+        }
         set({
           dailyPlan: { ...state.tomorrowPlan, isComplete: false, completedAt: undefined },
           tomorrowPlan: null,
@@ -196,14 +215,35 @@ export function makeDailyPlanActions(set: StoreSet, get: StoreGet) {
         return
       }
 
-      // Clear stale tomorrow plan
+      // 2. Clear stale tomorrow plan
       if (state.tomorrowPlan && state.tomorrowPlan.date < today) {
         set({ tomorrowPlan: null })
       }
 
-      // Clear stale daily plan (from yesterday or older)
+      // 3. Archive + rollover stale daily plan
       if (state.dailyPlan && state.dailyPlan.date !== today) {
-        set({ dailyPlan: null })
+        const stale = state.dailyPlan
+        const carried = rolloverTasks(stale, allTasks)
+        const hasCarry = carried.shortTasks.length > 0
+          || carried.maintenanceTasks.length > 0
+          || carried.shortProjects.length > 0
+          || carried.maintenanceProjects.length > 0
+
+        const todayPlan: DailyPlan | null = hasCarry ? {
+          date: today,
+          deepBlock: { projectId: '' },
+          shortTasks: carried.shortTasks,
+          shortProjects: carried.shortProjects,
+          maintenanceTasks: carried.maintenanceTasks,
+          maintenanceProjects: carried.maintenanceProjects,
+          meetings: [],
+          isComplete: false,
+        } : null
+
+        set({
+          planHistory: { ...state.planHistory, [stale.date]: stale },
+          dailyPlan: todayPlan,
+        })
       }
     },
   }

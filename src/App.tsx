@@ -28,6 +28,7 @@ const LiveMeetingView = lazy(() => import('./components/meetings/LiveMeetingView
 const MeetingsPage = lazy(() => import('./components/meetings/MeetingsPage').then(m => ({ default: m.MeetingsPage })))
 const RecurringTasksDrawer = lazy(() => import('./components/ui/RecurringTasksDrawer').then(m => ({ default: m.RecurringTasksDrawer })))
 const WeeklyReviewPage = lazy(() => import('./components/review/WeeklyReviewPage').then(m => ({ default: m.WeeklyReviewPage })))
+const WeekPlannerView = lazy(() => import('./components/week/WeekPlannerView').then(m => ({ default: m.WeekPlannerView })))
 
 function App() {
   // Shared project page — standalone route, no auth/store needed
@@ -190,6 +191,15 @@ function App() {
           Review
         </button>
         <button
+          onClick={() => setActiveView('week')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] text-[12px] font-medium tracking-[0.02em] transition-colors
+            ${activeView === 'week'
+              ? 'bg-charcoal text-[#FAF9F7]'
+              : 'text-stone/60 hover:text-charcoal hover:bg-border-light'}`}
+        >
+          Week
+        </button>
+        <button
           onClick={() => setActiveView('write-away')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] text-[12px] font-medium tracking-[0.02em] transition-colors
             ${activeView === 'write-away'
@@ -271,6 +281,8 @@ function App() {
           <Suspense fallback={null}><MeetingsPage /></Suspense>
         ) : activeView === 'review' ? (
           <Suspense fallback={null}><WeeklyReviewPage /></Suspense>
+        ) : activeView === 'week' ? (
+          <Suspense fallback={null}><WeekPlannerView /></Suspense>
         ) : activeView === 'write-away' ? (
           <WriteAwayPage />
         ) : (

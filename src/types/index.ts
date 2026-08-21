@@ -240,15 +240,16 @@ export interface WorkContext {
 }
 
 export const GOAL_COLORS = ['#3B7A6E', '#B8863A', '#4A6FA5', '#7E5BA5', '#A5635E', '#8B8680'] as const
+export type GoalColor = typeof GOAL_COLORS[number]
 
 export interface Goal {
   id: string
-  title: string               // what you want to achieve
-  description?: string        // the "why" — what business outcome this drives
-  startDate: string            // YYYY-MM-DD
-  targetDate: string           // YYYY-MM-DD
-  targetDaysWorked?: number    // optional effort target
-  color: string                 // one of GOAL_COLORS
+  title: string             // what you want to achieve
+  description?: string      // the "why" — what business outcome this drives
+  startDate: string         // YYYY-MM-DD
+  targetDate: string        // YYYY-MM-DD
+  targetDaysWorked?: number // optional effort target
+  color: GoalColor
   createdAt: string
   updatedAt: string
 }

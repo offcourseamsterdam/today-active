@@ -76,11 +76,10 @@ export function TodayColumn({ onOpenMeetings }: TodayColumnProps) {
       // oversight for you to fix): changeTodayItemTier only handles project/task.
       // Meetings coexisting with a deep project in the deep tier (see deriveItemOrder)
       // adds eviction-rule complexity specific to meetings that isn't worth building
-      // right now. Changing a meeting's tier from THIS component is a graceful no-op
-      // for now — the OLD DailyPlanList.tsx (untouched by this task, still live until
-      // a later cleanup task removes it) still handles meeting tier-changes correctly,
-      // so this is not a regression for existing functionality, just a temporary gap
-      // in the NEW component specifically.
+      // right now. Changing a meeting's tier from the Today column is currently
+      // unimplemented — this is a silent no-op, and there is no other working UI path
+      // for it anymore (the old DailyPlanList.tsx, which used to handle this, was
+      // deleted). This is a known permanent gap, not a temporary one.
       return
     }
     changeTodayItemTier(id, tier)

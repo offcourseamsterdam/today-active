@@ -130,7 +130,7 @@ export const ProjectCard = memo(function ProjectCard({ project, onClick, isDragO
       <div className="px-4 py-3.5">
         <div className="flex items-start justify-between gap-2 mb-1">
           <div className="text-[14px] font-medium text-charcoal leading-snug">{project.title}</div>
-          <CardMenu id={project.id} type="project" />
+          {!isDragOverlay && <CardMenu id={project.id} type="project" />}
         </div>
 
         {/* Context labels */}

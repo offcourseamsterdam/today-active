@@ -4,6 +4,7 @@ import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { Task, Project } from '../../types'
 import { WaitingBadge } from '../ui/WaitingBadge'
+import { CardMenu } from './CardMenu'
 
 interface StandaloneTaskCardProps {
   task: Task
@@ -181,6 +182,8 @@ export const StandaloneTaskCard = memo(function StandaloneTaskCard({
           </div>
         )}
       </div>
+
+      {!isDragOverlay && <CardMenu id={task.id} type="task" />}
 
       <button
         onPointerDown={e => e.stopPropagation()}

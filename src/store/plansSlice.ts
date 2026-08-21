@@ -85,21 +85,25 @@ export function makeDailyPlanActions(set: StoreSet, get: StoreGet) {
       if (order.some(i => i.id === id)) return
 
       let updated: DailyPlan = plan
-      let baseOrder = order
+      let newOrder: PlanItem[]
       if (tier === 'deep' && type === 'project') {
         updated = { ...updated, deepBlock: { projectId: id } }
-        baseOrder = order.filter(i => !(i.tier === 'deep' && i.type === 'project'))
+        const hasExistingDeepProject = order.some(i => i.tier === 'deep' && i.type === 'project')
+        newOrder = hasExistingDeepProject
+          ? order.map(i => (i.tier === 'deep' && i.type === 'project') ? { id, type, tier } : i)
+          : [...order, { id, type, tier }]
       } else if (tier === 'short') {
         updated = type === 'project'
           ? { ...updated, shortProjects: [...updated.shortProjects, id] }
           : { ...updated, shortTasks: [...updated.shortTasks, id] }
-      } else if (tier === 'maintenance') {
+        newOrder = [...order, { id, type, tier }]
+      } else {
         updated = type === 'project'
           ? { ...updated, maintenanceProjects: [...updated.maintenanceProjects, id] }
           : { ...updated, maintenanceTasks: [...updated.maintenanceTasks, id] }
+        newOrder = [...order, { id, type, tier }]
       }
 
-      const newOrder = [...baseOrder, { id, type, tier }]
       set({
         dailyPlan: { ...updated, itemOrder: newOrder, blockOrder: deriveBlockOrder(newOrder) },
       })

@@ -1,6 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import OpenAI from 'openai'
 
+function checkOrDefault(v: unknown): { pass: boolean; note: string } {
+  if (v && typeof v === 'object' && typeof (v as { pass?: unknown }).pass === 'boolean') {
+    return v as { pass: boolean; note: string }
+  }
+  return { pass: false, note: '' }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
@@ -84,11 +91,11 @@ Return a JSON object with exactly these keys, each an object with "pass" (boolea
 
     const parsed = JSON.parse(content)
     res.status(200).json({
-      specific: parsed.specific ?? { pass: false, note: '' },
-      measurable: parsed.measurable ?? { pass: false, note: '' },
-      achievable: parsed.achievable ?? { pass: false, note: '' },
-      relevant: parsed.relevant ?? { pass: false, note: '' },
-      timeBound: parsed.timeBound ?? { pass: false, note: '' },
+      specific: checkOrDefault(parsed.specific),
+      measurable: checkOrDefault(parsed.measurable),
+      achievable: checkOrDefault(parsed.achievable),
+      relevant: checkOrDefault(parsed.relevant),
+      timeBound: checkOrDefault(parsed.timeBound),
     })
   } catch (err) {
     console.error('Goal review error:', err)

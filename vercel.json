@@ -25,6 +25,10 @@
     "api/recent-meeting-summary.ts": {
       "maxDuration": 30,
       "memory": 512
+    },
+    "api/goal-review.ts": {
+      "maxDuration": 30,
+      "memory": 512
     }
   }
 }

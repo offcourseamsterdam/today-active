@@ -80,6 +80,7 @@ export function KanbanBoard({
   const dailyPlan = useStore(s => s.dailyPlan)
   const addToTodayPlan = useStore(s => s.addToTodayPlan)
   const reorderTodayItems = useStore(s => s.reorderTodayItems)
+  const changeTodayItemTier = useStore(s => s.changeTodayItemTier)
 
   const [activeProject, setActiveProject] = useState<Project | null>(null)
   const [activeOrphanTask, setActiveOrphanTask] = useState<Task | null>(null)
@@ -245,18 +246,39 @@ export function KanbanBoard({
     const overId = over.id as string
     if (activeId === overId) return
 
-    // --- Reorder within Today ---
+    // --- Reorder / retier within Today ---
     if (wasPlanItem) {
-      if (!overId.startsWith('plan-')) return
-      const oldIndex = orderedTodayItems.findIndex(i => `plan-${i.id}` === activeId)
-      const newIndex = orderedTodayItems.findIndex(i => `plan-${i.id}` === overId)
-      if (oldIndex === -1 || newIndex === -1) return
-      // Reject cross-tier drops rather than silently reinterpreting them as a tier
-      // change — tiers are stacked in the same DndContext so collision detection can
-      // land on an adjacent tier's item; the "Change tier" menu action is the intended
-      // way to move an item between tiers, not an accidental overshoot while reordering.
-      if (orderedTodayItems[oldIndex].tier !== orderedTodayItems[newIndex].tier) return
-      reorderTodayItems(arrayMove(orderedTodayItems, oldIndex, newIndex))
+      const activeItem = orderedTodayItems.find(i => `plan-${i.id}` === activeId)
+      if (!activeItem) return
+
+      // Resolve the drop target's tier: either a tier zone's own id, or another
+      // Today item's id (adopt that item's tier — same nested-droppable fallback
+      // pattern used below for external drops into Today).
+      const overItem = overId.startsWith('plan-')
+        ? orderedTodayItems.find(i => `plan-${i.id}` === overId)
+        : null
+      const targetTier = overId === 'today-deep' ? 'deep'
+        : overId === 'today-short' ? 'short'
+        : overId === 'today-maintenance' ? 'maintenance'
+        : overItem ? overItem.tier
+        : null
+      if (!targetTier) return
+
+      if (activeItem.tier === targetTier) {
+        // Same-tier reorder — unchanged behavior from before.
+        if (!overItem) return
+        const oldIndex = orderedTodayItems.findIndex(i => `plan-${i.id}` === activeId)
+        const newIndex = orderedTodayItems.findIndex(i => `plan-${i.id}` === overId)
+        if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return
+        reorderTodayItems(arrayMove(orderedTodayItems, oldIndex, newIndex))
+        return
+      }
+
+      // Cross-tier drag — reassign the item's tier directly. This is now a first-class
+      // way to reprioritize (per user feedback), not a rejected accident. changeTodayItemTier
+      // already enforces the deep-tier cap (evicting a prior deep project) and rejects
+      // moving a task into deep, so those rules apply automatically here too.
+      changeTodayItemTier(activeItem.id, targetTier)
       return
     }
 

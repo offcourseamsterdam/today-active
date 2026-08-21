@@ -28,6 +28,7 @@ import { DoneListColumn } from './DoneListColumn'
 import { TodayColumn } from './TodayColumn'
 import { KANBAN_COLUMNS, type Project, type ProjectStatus, type Task, type PlanItem } from '../../types'
 import { deriveItemOrder } from '../../lib/planOrder'
+import { findTaskById } from '../../lib/taskLookup'
 import { OrphanTaskModal } from './OrphanTaskModal'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 
@@ -68,6 +69,7 @@ export function KanbanBoard({
 }: KanbanBoardProps) {
   const projects = useStore(s => s.projects)
   const orphanTasks = useStore(s => s.orphanTasks)
+  const recurringTasks = useStore(s => s.recurringTasks)
   const moveProject = useStore(s => s.moveProject)
   const reorderProjects = useStore(s => s.reorderProjects)
   const reorderProjectAfter = useStore(s => s.reorderProjectAfter)
@@ -167,7 +169,10 @@ export function KanbanBoard({
     const overId = over.id as string
     if (activeId === overId) return
 
-    if (activeId.startsWith('plan-') || overId.startsWith('today-')) {
+    const overPlanItem = overId.startsWith('plan-')
+      ? orderedTodayItems.find(i => `plan-${i.id}` === overId)
+      : null
+    if (activeId.startsWith('plan-') || overId.startsWith('today-') || (overPlanItem && !activeId.startsWith('plan-'))) {
       setDragPreview(null)
       setBacklogDragPreview(null)
       return
@@ -252,14 +257,34 @@ export function KanbanBoard({
       const oldIndex = orderedTodayItems.findIndex(i => `plan-${i.id}` === activeId)
       const newIndex = orderedTodayItems.findIndex(i => `plan-${i.id}` === overId)
       if (oldIndex === -1 || newIndex === -1) return
+      // Reject cross-tier drops rather than silently reinterpreting them as a tier
+      // change — tiers are stacked in the same DndContext so collision detection can
+      // land on an adjacent tier's item; the "Change tier" menu action is the intended
+      // way to move an item between tiers, not an accidental overshoot while reordering.
+      if (orderedTodayItems[oldIndex].tier !== orderedTodayItems[newIndex].tier) return
       reorderTodayItems(arrayMove(orderedTodayItems, oldIndex, newIndex))
       return
     }
 
     // --- Drop a project/orphan task into a Today tier zone ---
-    const todayTier = overId === 'today-deep' ? 'deep' : overId === 'today-short' ? 'short' : overId === 'today-maintenance' ? 'maintenance' : null
+    // overId may be the tier zone's own droppable id (empty zone) or, once the tier has
+    // items, an existing item's sortable id (`plan-*`) — same nested-droppable ambiguity
+    // the kanban column-vs-card lookups below already handle, so fall back to the
+    // hovered item's tier in that case. By this point `wasPlanItem` is false (that
+    // branch already returned above), so a `plan-*` overId here unambiguously means
+    // "dropping onto an existing Today item," not a reorder.
+    const overPlanItem = overId.startsWith('plan-')
+      ? orderedTodayItems.find(i => `plan-${i.id}` === overId)
+      : null
+    const todayTier = overId === 'today-deep' ? 'deep'
+      : overId === 'today-short' ? 'short'
+      : overId === 'today-maintenance' ? 'maintenance'
+      : overPlanItem ? overPlanItem.tier
+      : null
     if (todayTier) {
       if (wasOrphan) {
+        // Tasks can't be deep (mirrors addToTodayPlan's own guard and TierBadge's rule) —
+        // dropping an orphan task on the deep zone is a silent no-op, not an error.
         if (todayTier !== 'deep') addToTodayPlan(activeId, 'task', todayTier)
       } else {
         addToTodayPlan(activeId, 'project', todayTier)
@@ -531,6 +556,15 @@ export function KanbanBoard({
                   onAssignProject={() => {}}
                   isDragOverlay
                 />
+              </div>
+            )}
+            {activePlanItem && (
+              <div className="rotate-1 scale-105 rounded-[8px] border bg-card border-border/50 px-3.5 py-2.5 shadow-lg">
+                <span className="text-[13px] text-charcoal">
+                  {activePlanItem.type === 'project'
+                    ? (projects.find(p => p.id === activePlanItem.id)?.title ?? '')
+                    : (findTaskById(activePlanItem.id, projects, orphanTasks, recurringTasks)?.task.title ?? '')}
+                </span>
               </div>
             )}
           </DragOverlay>

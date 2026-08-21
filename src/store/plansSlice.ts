@@ -292,6 +292,10 @@ export function makeDailyPlanActions(set: StoreSet, get: StoreGet) {
         if (state.dailyPlan && state.dailyPlan.date !== today) {
           const stale = state.dailyPlan
           const carried = rolloverTasks(stale, allTasks)
+          const deepConflict = promoted.deepBlock.projectId !== '' && carried.deepProjectId !== ''
+            && promoted.deepBlock.projectId !== carried.deepProjectId
+          const mergedPinnedIds = new Set([...(carried.pinnedItemIds ?? []), ...(promoted.pinnedItemIds ?? [])])
+          if (deepConflict) mergedPinnedIds.delete(carried.deepProjectId)
           promoted = {
             ...promoted,
             shortTasks: Array.from(new Set([...promoted.shortTasks, ...carried.shortTasks])),
@@ -301,7 +305,7 @@ export function makeDailyPlanActions(set: StoreSet, get: StoreGet) {
             deepBlock: promoted.deepBlock.projectId
               ? promoted.deepBlock
               : (carried.deepProjectId ? { projectId: carried.deepProjectId } : promoted.deepBlock),
-            pinnedItemIds: Array.from(new Set([...(carried.pinnedItemIds ?? []), ...(promoted.pinnedItemIds ?? [])])),
+            pinnedItemIds: Array.from(mergedPinnedIds),
             itemOrder: undefined,
             blockOrder: undefined,
           }

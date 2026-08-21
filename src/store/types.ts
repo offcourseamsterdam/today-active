@@ -1,5 +1,5 @@
 import type { StoreApi } from 'zustand'
-import type { Project, Task, Meeting, MeetingNotes, AgendaItemNotes, AgendaItem, Settings, Category, ProjectStatus, DailyPlan, RecurrenceRule, CalendarEvent, MeetingSession, PlanItem, WriteAwayEntry } from '../types'
+import type { Project, Task, Meeting, MeetingNotes, AgendaItemNotes, AgendaItem, Settings, Category, ProjectStatus, DailyPlan, RecurrenceRule, CalendarEvent, MeetingSession, PlanItem, WriteAwayEntry, Goal } from '../types'
 
 export interface ProjectDecision {
   decision: string
@@ -36,6 +36,7 @@ export interface VandaagState {
   tomorrowPlan: DailyPlan | null
   planHistory: Record<string, DailyPlan>
   weekSlots: Record<string, string[]>
+  goals: Goal[]
   personalRules: string[]
   writeAwayEntries: WriteAwayEntry[]
 
@@ -244,6 +245,12 @@ export interface VandaagState {
   setWeekSlot: (date: string, projectIds: string[]) => void
   addProjectToSlot: (date: string, projectId: string) => void
   removeProjectFromSlot: (date: string, projectId: string) => void
+
+  // Goals
+  addGoal: (goal: Omit<Goal, 'id' | 'createdAt' | 'updatedAt'>) => string
+  updateGoal: (id: string, patch: Partial<Omit<Goal, 'id' | 'createdAt'>>) => void
+  deleteGoal: (id: string) => void
+  assignProjectToGoal: (projectId: string, goalId: string | null) => void
 
   // Calendar actions
   fetchCalendarEvents: (accessToken: string, date: string) => Promise<void>

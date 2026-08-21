@@ -13,6 +13,7 @@ import { makeMeetingActions } from './meetingsSlice'
 import { makeCalendarActions } from './calendarSlice'
 import { makeMeetingSessionActions } from './meetingSessionSlice'
 import { makeWriteAwayActions } from './writeAwaySlice'
+import { makeGoalActions } from './goalsSlice'
 
 function createSeedMeetings(): { meetings: Meeting[]; recurringMeetings: Meeting[] } {
   const now = new Date().toISOString()
@@ -79,6 +80,7 @@ export const useStore = create<VandaagState>()(
       tomorrowPlan: null,
       planHistory: {},
       weekSlots: {},
+      goals: [],
       personalRules: [],
       writeAwayEntries: [],
       openProjectId: null,
@@ -219,6 +221,7 @@ export const useStore = create<VandaagState>()(
       ...makeCalendarActions(set, get),
       ...makeMeetingSessionActions(set, get),
       ...makeWriteAwayActions(set, get),
+      ...makeGoalActions(set, get),
 
       // Selectors
       getProjectsByStatus: (status) => get().projects.filter(p => p.status === status),
@@ -253,6 +256,7 @@ export const useStore = create<VandaagState>()(
         tomorrowPlan: state.tomorrowPlan,
         planHistory: state.planHistory,
         weekSlots: state.weekSlots,
+        goals: state.goals,
         personalRules: state.personalRules,
         greetedDate: state.greetedDate,
         meetingSession: state.meetingSession,

@@ -74,15 +74,21 @@ export function makeDailyPlanActions(set: StoreSet, get: StoreGet) {
       return id
     },
 
-    addToTodayPlan: (id: string, type: PlanItem['type'], tier: 'deep' | 'short' | 'maintenance') => {
+    // Meetings aren't handled by this action — use setDeepMeeting/addShortMeeting/
+    // addMaintenanceMeeting (and their remove* counterparts) for those instead.
+    addToTodayPlan: (id: string, type: 'project' | 'task', tier: 'deep' | 'short' | 'maintenance') => {
+      if (tier === 'deep' && type !== 'project') return
+
       const state = get()
       const plan = ensureTodayPlan(state)
       const order = plan.itemOrder ?? deriveItemOrder(plan)
       if (order.some(i => i.id === id)) return
 
       let updated: DailyPlan = plan
+      let baseOrder = order
       if (tier === 'deep' && type === 'project') {
         updated = { ...updated, deepBlock: { projectId: id } }
+        baseOrder = order.filter(i => !(i.tier === 'deep' && i.type === 'project'))
       } else if (tier === 'short') {
         updated = type === 'project'
           ? { ...updated, shortProjects: [...updated.shortProjects, id] }
@@ -93,7 +99,7 @@ export function makeDailyPlanActions(set: StoreSet, get: StoreGet) {
           : { ...updated, maintenanceTasks: [...updated.maintenanceTasks, id] }
       }
 
-      const newOrder = [...order, { id, type, tier }]
+      const newOrder = [...baseOrder, { id, type, tier }]
       set({
         dailyPlan: { ...updated, itemOrder: newOrder, blockOrder: deriveBlockOrder(newOrder) },
       })

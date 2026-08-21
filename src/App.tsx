@@ -155,6 +155,15 @@ function App() {
       {/* Nav bar */}
       <nav className="max-w-[1400px] mx-auto px-4 sm:px-6 pb-3 flex items-center gap-1">
         <button
+          onClick={() => setActiveView('kanban')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] text-[12px] font-medium tracking-[0.02em] transition-colors
+            ${activeView === 'kanban'
+              ? 'bg-charcoal text-[#FAF9F7]'
+              : 'text-stone/60 hover:text-charcoal hover:bg-border-light'}`}
+        >
+          Projects
+        </button>
+        <button
           onClick={() => setActiveView('meetings')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] text-[12px] font-medium tracking-[0.02em] transition-colors
             ${activeView === 'meetings'

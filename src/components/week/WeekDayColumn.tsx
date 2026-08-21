@@ -1,7 +1,7 @@
 import { useDroppable } from '@dnd-kit/core'
 import { format, isToday, isPast, startOfDay } from 'date-fns'
 import { nl } from 'date-fns/locale'
-import type { Project, DailyPlan } from '../../types'
+import type { Project, DailyPlan, Goal } from '../../types'
 import { WeekProjectCard } from './WeekProjectCard'
 
 interface Props {
@@ -9,6 +9,7 @@ interface Props {
   projectIds: string[]
   historyPlan: DailyPlan | null
   projects: Project[]
+  goals: Goal[]
   onRemove: (projectId: string) => void
 }
 
@@ -21,7 +22,7 @@ function getProjectsFromPlan(plan: DailyPlan, projects: Project[]): Project[] {
   return projects.filter(p => ids.has(p.id))
 }
 
-export function WeekDayColumn({ date, projectIds, historyPlan, projects, onRemove }: Props) {
+export function WeekDayColumn({ date, projectIds, historyPlan, projects, goals, onRemove }: Props) {
   const dateKey = format(date, 'yyyy-MM-dd')
   const isPastDay = isPast(startOfDay(date)) && !isToday(date)
   const isEditable = !isPastDay
@@ -68,6 +69,7 @@ export function WeekDayColumn({ date, projectIds, historyPlan, projects, onRemov
             dateKey={dateKey}
             isReadOnly={!isEditable}
             onRemove={isEditable ? () => onRemove(project.id) : undefined}
+            goalColor={goals.find(g => g.id === project.goalId)?.color}
           />
         ))}
         {displayProjects.length === 0 && isEditable && (

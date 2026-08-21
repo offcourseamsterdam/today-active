@@ -6,6 +6,7 @@ interface Props {
   dateKey: string
   isReadOnly?: boolean
   onRemove?: () => void
+  goalColor?: string
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -14,7 +15,7 @@ const STATUS_COLORS: Record<string, string> = {
   backlog: 'bg-stone-100 border-stone-200 text-stone-700',
 }
 
-export function WeekProjectCard({ project, dateKey, isReadOnly, onRemove }: Props) {
+export function WeekProjectCard({ project, dateKey, isReadOnly, onRemove, goalColor }: Props) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `${dateKey}::${project.id}`,
     data: { projectId: project.id, fromDate: dateKey },
@@ -34,6 +35,9 @@ export function WeekProjectCard({ project, dateKey, isReadOnly, onRemove }: Prop
         ${isReadOnly ? 'cursor-default' : ''}
       `}
     >
+      {goalColor && (
+        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: goalColor }} />
+      )}
       <span className="truncate">{project.title}</span>
       {!isReadOnly && onRemove && (
         <button

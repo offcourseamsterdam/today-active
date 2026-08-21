@@ -1,8 +1,11 @@
-import { useDraggable } from '@dnd-kit/core'
-import type { Project } from '../../types'
+import { useDraggable, useDroppable } from '@dnd-kit/core'
+import type { Goal, Project } from '../../types'
+import { getGoalCompletion } from '../../lib/goals'
 
 interface Props {
   projects: Project[]
+  goals: Goal[]           // active goals only — caller filters
+  onEditGoal: (goal: Goal) => void
 }
 
 function SidebarCard({ project }: { project: Project }) {
@@ -24,25 +27,70 @@ function SidebarCard({ project }: { project: Project }) {
   )
 }
 
-export function WeekProjectSidebar({ projects }: Props) {
-  const active = projects.filter(p => p.status === 'in_progress' || p.status === 'waiting')
-  const backlog = projects.filter(p => p.status === 'backlog')
+function GoalSection({ goal, projects, onEditGoal }: {
+  goal: Goal
+  projects: Project[]
+  onEditGoal: (goal: Goal) => void
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `goalHeader::${goal.id}`,
+    data: { assignGoalId: goal.id },
+  })
+  const { done, total } = getGoalCompletion(goal, projects)
 
   return (
-    <div className="flex flex-col gap-3 w-[160px] shrink-0">
+    <div className="flex flex-col gap-1">
+      <button
+        ref={setNodeRef}
+        onClick={() => onEditGoal(goal)}
+        className={`flex items-center gap-1.5 text-left rounded-[6px] px-1 py-0.5 -mx-1 transition-colors
+          ${isOver ? 'bg-charcoal/5 ring-1 ring-charcoal/20' : 'hover:bg-border-light'}`}
+      >
+        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: goal.color }} />
+        <span className="text-[10px] uppercase tracking-[0.05em] text-stone/60 font-medium truncate">
+          {goal.title}
+        </span>
+        <span className="text-[9px] text-stone/40 shrink-0 ml-auto">{done}/{total}</span>
+      </button>
+      {projects.map(p => <SidebarCard key={p.id} project={p} />)}
+    </div>
+  )
+}
+
+export function WeekProjectSidebar({ projects, goals, onEditGoal }: Props) {
+  const workable = projects.filter(p => p.status !== 'done')
+  const unassigned = workable.filter(
+    p => !p.goalId || !goals.some(g => g.id === p.goalId)
+  )
+
+  const { setNodeRef: setUnassignedRef, isOver: isOverUnassigned } = useDroppable({
+    id: 'goalHeader::unassigned',
+    data: { assignGoalId: null },
+  })
+
+  return (
+    <div className="flex flex-col gap-3 w-[180px] shrink-0">
       <div className="text-[11px] uppercase tracking-[0.06em] text-stone/50 font-medium">Projecten</div>
-      {active.length > 0 && (
-        <div className="flex flex-col gap-1">
-          <div className="text-[10px] uppercase tracking-[0.05em] text-stone/40 mb-0.5">Actief</div>
-          {active.map(p => <SidebarCard key={p.id} project={p} />)}
+
+      {goals.map(goal => (
+        <GoalSection
+          key={goal.id}
+          goal={goal}
+          projects={workable.filter(p => p.goalId === goal.id)}
+          onEditGoal={onEditGoal}
+        />
+      ))}
+
+      <div className="flex flex-col gap-1">
+        <div
+          ref={setUnassignedRef}
+          className={`text-[10px] uppercase tracking-[0.05em] text-stone/40 mb-0.5 rounded-[6px]
+            px-1 py-0.5 -mx-1 transition-colors ${isOverUnassigned ? 'bg-charcoal/5 ring-1 ring-charcoal/20' : ''}`}
+        >
+          Unassigned
         </div>
-      )}
-      {backlog.length > 0 && (
-        <div className="flex flex-col gap-1">
-          <div className="text-[10px] uppercase tracking-[0.05em] text-stone/40 mb-0.5">Backlog</div>
-          {backlog.map(p => <SidebarCard key={p.id} project={p} />)}
-        </div>
-      )}
+        {unassigned.map(p => <SidebarCard key={p.id} project={p} />)}
+      </div>
     </div>
   )
 }

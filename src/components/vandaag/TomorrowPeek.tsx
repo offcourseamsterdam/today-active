@@ -7,10 +7,9 @@ import { findTaskById } from '../../lib/taskLookup'
 
 interface TomorrowPeekProps {
   onClose: () => void
-  onEdit: () => void
 }
 
-export function TomorrowPeek({ onClose, onEdit }: TomorrowPeekProps) {
+export function TomorrowPeek({ onClose }: TomorrowPeekProps) {
   const tomorrowPlan = useStore(s => s.tomorrowPlan)
   const projects = useStore(s => s.projects)
   const orphanTasks = useStore(s => s.orphanTasks)
@@ -53,13 +52,7 @@ export function TomorrowPeek({ onClose, onEdit }: TomorrowPeekProps) {
         {!hasPlan ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-12">
             <Moon size={22} className="text-stone/20 mb-4" />
-            <div className="text-[14px] text-stone/40 font-serif italic mb-3">Nog niets gepland</div>
-            <button
-              onClick={onEdit}
-              className="text-[12px] text-stone hover:text-charcoal transition-colors underline underline-offset-2"
-            >
-              Plan morgen nu
-            </button>
+            <div className="text-[14px] text-stone/40 font-serif italic">Nog niets gepland</div>
           </div>
         ) : (
           <div className="space-y-7">
@@ -113,16 +106,6 @@ export function TomorrowPeek({ onClose, onEdit }: TomorrowPeekProps) {
             )}
           </div>
         )}
-      </div>
-
-      {/* Footer */}
-      <div className="px-4 sm:px-7 py-5 border-t border-border/50">
-        <button
-          onClick={onEdit}
-          className="text-[12px] text-stone/45 hover:text-stone transition-colors"
-        >
-          Bewerk planning →
-        </button>
       </div>
     </div>
   )

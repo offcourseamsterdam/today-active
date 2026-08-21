@@ -57,10 +57,6 @@ function App() {
   const [showAddTaskModal, setShowAddTaskModal] = useState(false)
   const [showAddProjectModal, setShowAddProjectModal] = useState(false)
   const [showRecurringDrawer, setShowRecurringDrawer] = useState(false)
-  // `planningDay` (the read value) lost its last reader when the `<PlanningMode>` branch
-  // was removed from the view switch below — the setter is still wired up for Tasks 12/13
-  // to finish repointing, so only the unused read is elided here (kept out of noUnusedLocals).
-  const [, setPlanningDay] = useState<'today' | 'tomorrow'>('tomorrow')
   const [hour, setHour] = useState(() => new Date().getHours())
 
   // Track today's date string — updates if the tab is kept open past midnight
@@ -216,7 +212,6 @@ function App() {
         >
           <TomorrowPeek
             onClose={() => setShowTomorrowPeek(false)}
-            onEdit={() => { setShowTomorrowPeek(false); setPlanningDay('tomorrow'); setActiveView('planning') }}
           />
         </div>
       </>
@@ -232,7 +227,7 @@ function App() {
         onAddProject={() => setShowAddProjectModal(true)}
         onOpenRecurringTasks={() => setShowRecurringDrawer(true)}
         onPlanToday={() => setShowPlanTodayModal(true)}
-        onPlanTomorrow={() => { setPlanningDay('tomorrow'); setActiveView('planning') }}
+        onPlanTomorrow={() => setShowTomorrowPeek(true)}
         onMyRules={() => setActiveView('philosophy')}
         onSignIn={signIn}
         onSignOut={signOut}

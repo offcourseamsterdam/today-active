@@ -37,6 +37,7 @@ export interface Project {
   tasks: Task[]
   trackProgress: boolean
   missionCritical?: boolean
+  goalId?: string          // links this project to one Objective — one goal per project
   daysWorked: number
   daysWorkedLog: string[] // Array of date strings (YYYY-MM-DD)
   waitingOn?: WaitingOn[]
@@ -236,6 +237,20 @@ export interface LifeWeeks {
 export interface WorkContext {
   id: string
   name: string
+}
+
+export const GOAL_COLORS = ['#3B7A6E', '#B8863A', '#4A6FA5', '#7E5BA5', '#A5635E', '#8B8680'] as const
+
+export interface Goal {
+  id: string
+  title: string               // what you want to achieve
+  description?: string        // the "why" — what business outcome this drives
+  startDate: string            // YYYY-MM-DD
+  targetDate: string           // YYYY-MM-DD
+  targetDaysWorked?: number    // optional effort target
+  color: string                 // one of GOAL_COLORS
+  createdAt: string
+  updatedAt: string
 }
 
 export interface Settings {

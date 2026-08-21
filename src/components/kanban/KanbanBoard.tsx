@@ -115,7 +115,15 @@ export function KanbanBoard({
     [projects, selectedContextId]
   )
 
-  const orderedTodayItems = dailyPlan ? (dailyPlan.itemOrder ?? deriveItemOrder(dailyPlan)) : []
+  // Tier-grouped (deep, then short, then maintenance) to match TodayColumn's single
+  // shared SortableContext render order — raw dailyPlan.itemOrder can interleave tiers
+  // as items get added over time, which would desync index math here from what's
+  // actually rendered/draggable in TodayColumn.
+  const orderedTodayItems = dailyPlan
+    ? (['deep', 'short', 'maintenance'] as const).flatMap(
+        t => (dailyPlan.itemOrder ?? deriveItemOrder(dailyPlan)).filter(i => i.tier === t)
+      )
+    : []
 
   const getProjectsByStatus = useCallback(
     (status: ProjectStatus) => visibleProjects.filter(p => p.status === status),

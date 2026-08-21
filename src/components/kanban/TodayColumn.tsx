@@ -30,26 +30,29 @@ function TierDropZone({ tier, items, onOpenMeetings, onTierChange, onRemove, tog
     return sum + 1
   }, 0)
 
+  // No SortableContext here — a single one wraps the whole column (see TodayColumn
+  // below). Splitting it per tier used to cause dnd-kit's multi-container sortable
+  // issue (an item briefly registers in two SortableContexts while being dragged
+  // across a tier boundary, which can render it twice). One shared context avoids
+  // that and also matches items.map()'s render order below.
   return (
     <div ref={setNodeRef} className={`rounded-[8px] p-1.5 transition-colors ${isOver ? 'bg-border-light' : ''}`}>
       <TierSectionHeader tier={tier} slotCount={slotCount} slotMax={TIER_SLOT_MAX[tier]} />
-      <SortableContext items={items.map(i => `plan-${i.id}`)} strategy={verticalListSortingStrategy}>
-        <div className="space-y-1.5">
-          {items.map(item => (
-            <SortableVandaagItem
-              key={item.id}
-              item={item}
-              onOpenMeetings={onOpenMeetings}
-              onRemove={onRemove}
-              onTierChange={onTierChange}
-              toggleTask={toggleTask}
-            />
-          ))}
-        </div>
-        {items.length === 0 && (
-          <div className="text-center text-stone/30 text-[11px] py-3 italic">Drop here</div>
-        )}
-      </SortableContext>
+      <div className="space-y-1.5">
+        {items.map(item => (
+          <SortableVandaagItem
+            key={item.id}
+            item={item}
+            onOpenMeetings={onOpenMeetings}
+            onRemove={onRemove}
+            onTierChange={onTierChange}
+            toggleTask={toggleTask}
+          />
+        ))}
+      </div>
+      {items.length === 0 && (
+        <div className="text-center text-stone/30 text-[11px] py-3 italic">Drop here</div>
+      )}
     </div>
   )
 }
@@ -64,8 +67,12 @@ export function TodayColumn({ onOpenMeetings }: TodayColumnProps) {
   const changeTodayItemTier = useStore(s => s.changeTodayItemTier)
   const toggleTask = useTaskToggle()
 
-  const items = dailyPlan ? (dailyPlan.itemOrder ?? deriveItemOrder(dailyPlan)) : []
-  const byTier = (t: Tier) => items.filter(i => i.tier === t)
+  const rawItems = dailyPlan ? (dailyPlan.itemOrder ?? deriveItemOrder(dailyPlan)) : []
+  const byTier = (t: Tier) => rawItems.filter(i => i.tier === t)
+  // Display/sortable order must match actual DOM order (grouped by tier), not raw
+  // itemOrder (which can interleave tiers as items get added over time) — dnd-kit's
+  // sorting strategy assumes the items list order matches render order.
+  const items = TIER_ORDER.flatMap(byTier)
 
   function handleTierChange(id: string, newTaskType: TaskType) {
     const tier: Tier = newTaskType === 'reminder' ? 'maintenance' : newTaskType
@@ -91,17 +98,19 @@ export function TodayColumn({ onOpenMeetings }: TodayColumnProps) {
         <span className="text-[13px] font-semibold text-stone tracking-[0.01em]">Today</span>
         <span className="text-[11px] px-2 py-0.5 rounded-full bg-border text-stone">{items.length}</span>
       </div>
-      {TIER_ORDER.map(tier => (
-        <TierDropZone
-          key={tier}
-          tier={tier}
-          items={byTier(tier)}
-          onOpenMeetings={onOpenMeetings}
-          onTierChange={handleTierChange}
-          onRemove={removeFromTodayPlan}
-          toggleTask={toggleTask}
-        />
-      ))}
+      <SortableContext items={items.map(i => `plan-${i.id}`)} strategy={verticalListSortingStrategy}>
+        {TIER_ORDER.map(tier => (
+          <TierDropZone
+            key={tier}
+            tier={tier}
+            items={byTier(tier)}
+            onOpenMeetings={onOpenMeetings}
+            onTierChange={handleTierChange}
+            onRemove={removeFromTodayPlan}
+            toggleTask={toggleTask}
+          />
+        ))}
+      </SortableContext>
     </div>
   )
 }

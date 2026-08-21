@@ -194,6 +194,7 @@ export interface DailyPlan {
   blockOrder?: Array<'deep' | 'short' | 'maintenance'>
   itemOrder?: PlanItem[]
   completedItemIds?: string[]  // plan item IDs marked "done for the day" (visual only)
+  pinnedItemIds?: string[]    // plan item IDs that survive the nightly rollover instead of clearing
   isComplete: boolean
   completedAt?: string
 }

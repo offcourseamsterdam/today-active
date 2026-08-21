@@ -30,6 +30,7 @@ function ensurePlan(
       meetings: existing.meetings ?? [],
       shortMeetingIds: existing.shortMeetingIds ?? [],
       maintenanceMeetingIds: existing.maintenanceMeetingIds ?? [],
+      pinnedItemIds: existing.pinnedItemIds ?? [],
       ...(isToday ? { blockOrder: existing.blockOrder ?? ['deep', 'short', 'maintenance'] } : {}),
     }
   }

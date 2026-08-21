@@ -1,3 +1,11 @@
+/* Establish cascade layer order up front so Mantine's (unlayered by default)
+   component CSS sits BELOW Tailwind's layers. Without this, Mantine's global
+   resets (e.g. `button, input { font: inherit }`) win over Tailwind utility
+   classes regardless of import order, because CSS Cascade Layers give any
+   unlayered rule unconditional priority over layered rules. */
+@layer mantine, theme, base, components, utilities;
+@import "@mantine/core/styles.css" layer(mantine);
+
 @import "tailwindcss";
 
 @theme {

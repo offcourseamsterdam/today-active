@@ -3,6 +3,7 @@ import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { CategoryBadge } from '../ui/CategoryBadge'
 import { WaitingEntryRow } from '../ui/WaitingEntryRow'
+import { CardMenu } from './CardMenu'
 import { daysSince, normalizeWaitingOn } from '../../lib/utils'
 import { CATEGORY_CONFIG } from '../../types'
 import type { Project } from '../../types'
@@ -59,7 +60,7 @@ export const ProjectCard = memo(function ProjectCard({ project, onClick, isDragO
     <div
       {...wrapperProps}
       onClick={onClick}
-      className={`rounded-[8px] mb-3 cursor-grab overflow-hidden
+      className={`group rounded-[8px] mb-3 cursor-grab overflow-hidden
         border transition-all duration-150
         ${isDragging
           ? 'opacity-0 pointer-events-none'
@@ -127,7 +128,10 @@ export const ProjectCard = memo(function ProjectCard({ project, onClick, isDragO
       )}
 
       <div className="px-4 py-3.5">
-        <div className="text-[14px] font-medium text-charcoal mb-1 leading-snug">{project.title}</div>
+        <div className="flex items-start justify-between gap-2 mb-1">
+          <div className="text-[14px] font-medium text-charcoal leading-snug">{project.title}</div>
+          <CardMenu id={project.id} type="project" />
+        </div>
 
         {/* Context labels */}
         {activeContexts.length > 0 && (

@@ -59,6 +59,11 @@ export function SortableVandaagItem({
       ref={setNodeRef}
       style={style}
       {...attributes}
+      // pointer-events-none here means this row's own CardMenu becomes unclickable once
+      // collapsed — that's fine, not a dead end: the same project always has its own
+      // separate, always-interactive CardMenu on its ProjectCard elsewhere on the board
+      // (dual-membership: a project shows in both its kanban-status column and today's
+      // plan simultaneously), so "Undo finish for today" stays reachable there.
       className={`rounded-[8px] border transition-all duration-500 group
         ${isDragging ? 'shadow-lg scale-[1.02] z-10 opacity-80' : ''}
         ${item.type === 'project' && isItemCompleted ? 'opacity-0 max-h-0 scale-95 -mt-2 overflow-hidden pointer-events-none' : 'opacity-100 max-h-[200px]'}

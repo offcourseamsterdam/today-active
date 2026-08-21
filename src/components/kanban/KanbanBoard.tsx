@@ -30,13 +30,10 @@ import { KANBAN_COLUMNS, type Project, type ProjectStatus, type Task, type PlanI
 import { deriveItemOrder } from '../../lib/planOrder'
 import { findTaskById } from '../../lib/taskLookup'
 import { OrphanTaskModal } from './OrphanTaskModal'
-import { ChevronDown, ChevronUp } from 'lucide-react'
 
 const EMPTY_CONTEXTS: never[] = []
 
 interface KanbanBoardProps {
-  collapsed?: boolean
-  onToggleCollapse?: () => void
   externalAddTask?: boolean
   onExternalAddTaskClose?: () => void
   externalAddProject?: boolean
@@ -59,8 +56,6 @@ function getOrphanColumn(task: Task): ProjectStatus {
 }
 
 export function KanbanBoard({
-  collapsed = false,
-  onToggleCollapse,
   externalAddTask = false,
   onExternalAddTaskClose,
   externalAddProject = false,
@@ -401,25 +396,6 @@ export function KanbanBoard({
   return (
     <>
       <div className="max-w-[1400px] mx-auto">
-        {/* Board divider */}
-        <div className="flex items-center gap-4 mb-5">
-          <button
-            onClick={onToggleCollapse}
-            className="flex items-center gap-2 text-stone hover:text-charcoal transition-colors group"
-          >
-            {collapsed
-              ? <ChevronDown size={14} className="text-stone/50 group-hover:text-stone transition-colors" />
-              : <ChevronUp size={14} className="text-stone/50 group-hover:text-stone transition-colors" />
-            }
-            <span className="text-[11px] uppercase tracking-[0.08em] font-medium">
-              Projects & tasks
-            </span>
-          </button>
-          <div className="flex-1 h-px bg-border" />
-        </div>
-
-        {!collapsed && <>
-
         {/* Context filter tabs */}
         {contexts.length > 0 && (
           <div className="flex items-center gap-1 mb-5">
@@ -569,7 +545,6 @@ export function KanbanBoard({
             )}
           </DragOverlay>
         </DndContext>
-      </> }
       </div>
 
       {/* Modals */}

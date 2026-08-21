@@ -160,7 +160,7 @@ export function WeeklyReviewPage() {
 
   function handleDoneWithReview() {
     handleFinish()
-    setTimeout(() => setActiveView('vandaag'), 400)
+    setTimeout(() => setActiveView('kanban'), 400)
   }
 
   return (

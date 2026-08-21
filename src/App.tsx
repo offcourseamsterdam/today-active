@@ -6,8 +6,6 @@ import { EnsoLogo } from './components/ui/EnsoLogo'
 import { KanbanBoard } from './components/kanban/KanbanBoard'
 import { ProjectModal } from './components/kanban/ProjectModal'
 import { Toast } from './components/ui/Toast'
-import { VandaagView } from './components/vandaag/VandaagView'
-import { PlanningMode } from './components/vandaag/PlanningMode'
 import { SmartFab } from './components/ui/SmartFab'
 import { WindDownBanner } from './components/ui/WindDownBanner'
 import { VandaagDarkContext } from './components/vandaag/VandaagDarkContext'
@@ -54,14 +52,15 @@ function App() {
   const setLiveMeetingOpen = useStore(s => s.setLiveMeetingOpen)
   const tickMeetingSession = useStore(s => s.tickMeetingSession)
   const [showEnough, setShowEnough] = useState(false)
-  const [vandaagCollapsed, setVandaagCollapsed] = useState(false)
-  const [kanbanCollapsed, setKanbanCollapsed] = useState(false)
   const [showTomorrowPeek, setShowTomorrowPeek] = useState(false)
   const [showPlanTodayModal, setShowPlanTodayModal] = useState(false)
   const [showAddTaskModal, setShowAddTaskModal] = useState(false)
   const [showAddProjectModal, setShowAddProjectModal] = useState(false)
   const [showRecurringDrawer, setShowRecurringDrawer] = useState(false)
-  const [planningDay, setPlanningDay] = useState<'today' | 'tomorrow'>('tomorrow')
+  // `planningDay` (the read value) lost its last reader when the `<PlanningMode>` branch
+  // was removed from the view switch below — the setter is still wired up for Tasks 12/13
+  // to finish repointing, so only the unused read is elided here (kept out of noUnusedLocals).
+  const [, setPlanningDay] = useState<'today' | 'tomorrow'>('tomorrow')
   const [hour, setHour] = useState(() => new Date().getHours())
 
   // Track today's date string — updates if the tab is kept open past midnight
@@ -161,15 +160,6 @@ function App() {
 
       {/* Nav bar */}
       <nav className="max-w-[1400px] mx-auto px-4 sm:px-6 pb-3 flex items-center gap-1">
-        <button
-          onClick={() => setActiveView('vandaag')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] text-[12px] font-medium tracking-[0.02em] transition-colors
-            ${activeView === 'vandaag' || activeView === 'planning'
-              ? 'bg-charcoal text-[#FAF9F7]'
-              : 'text-stone/60 hover:text-charcoal hover:bg-border-light'}`}
-        >
-          Vandaag
-        </button>
         <button
           onClick={() => setActiveView('meetings')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] text-[12px] font-medium tracking-[0.02em] transition-colors
@@ -274,9 +264,7 @@ function App() {
       <VandaagDarkContext.Provider value={false}>
       <main className="px-4 pb-28 sm:px-6 sm:pb-12">
         {activeView === 'philosophy' ? (
-          <Suspense fallback={null}><PhilosophyPage onBack={() => setActiveView('vandaag')} /></Suspense>
-        ) : activeView === 'planning' ? (
-          <PlanningMode onExit={() => setActiveView('vandaag')} day={planningDay} />
+          <Suspense fallback={null}><PhilosophyPage onBack={() => setActiveView('kanban')} /></Suspense>
         ) : activeView === 'meetings' ? (
           <Suspense fallback={null}><MeetingsPage /></Suspense>
         ) : activeView === 'review' ? (
@@ -286,23 +274,13 @@ function App() {
         ) : activeView === 'write-away' ? (
           <WriteAwayPage />
         ) : (
-          <>
-            <VandaagView
-              onOpenMeetings={() => setActiveView('meetings')}
-              onDayDone={() => setShowEnough(true)}
-              collapsed={vandaagCollapsed}
-              onToggleCollapse={() => setVandaagCollapsed(v => !v)}
-              onPeekTomorrow={() => setShowTomorrowPeek(true)}
-            />
-            <KanbanBoard
-              collapsed={kanbanCollapsed}
-              onToggleCollapse={() => setKanbanCollapsed(v => !v)}
-              externalAddTask={showAddTaskModal}
-              onExternalAddTaskClose={() => setShowAddTaskModal(false)}
-              externalAddProject={showAddProjectModal}
-              onExternalAddProjectClose={() => setShowAddProjectModal(false)}
-            />
-          </>
+          <KanbanBoard
+            onOpenMeetings={() => setActiveView('meetings')}
+            externalAddTask={showAddTaskModal}
+            onExternalAddTaskClose={() => setShowAddTaskModal(false)}
+            externalAddProject={showAddProjectModal}
+            onExternalAddProjectClose={() => setShowAddProjectModal(false)}
+          />
         )}
       </main>
       </VandaagDarkContext.Provider>

@@ -89,7 +89,7 @@ export const useStore = create<VandaagState>()(
       openMeetingId: null,
       justEndedMeetingId: null,
       projectModalDefaultTab: null,
-      activeView: 'vandaag',
+      activeView: 'kanban',
       greetedDate: null,
       artworkLoadingIds: [],
       meetingSession: null,

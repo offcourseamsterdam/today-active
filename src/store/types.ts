@@ -202,6 +202,7 @@ export interface VandaagState {
   addQuickMaintenanceTask: (title: string) => string
   addToTodayPlan: (id: string, type: 'project' | 'task', tier: 'deep' | 'short' | 'maintenance') => void
   removeFromTodayPlan: (id: string) => void
+  changeTodayItemTier: (id: string, newTier: 'deep' | 'short' | 'maintenance') => void
   reorderTodayItems: (newOrder: PlanItem[]) => void
   setBlockOrder: (order: Array<'deep' | 'short' | 'maintenance'>) => void
   setItemOrder: (items: PlanItem[]) => void

@@ -18,6 +18,7 @@ export function CardMenu({ id, type }: CardMenuProps) {
   const recurringTasks = useStore(s => s.recurringTasks)
   const addToTodayPlan = useStore(s => s.addToTodayPlan)
   const removeFromTodayPlan = useStore(s => s.removeFromTodayPlan)
+  const changeTodayItemTier = useStore(s => s.changeTodayItemTier)
   const togglePlanItemCompletion = useStore(s => s.togglePlanItemCompletion)
   const togglePlanItemPinned = useStore(s => s.togglePlanItemPinned)
   const addTomorrowShortTask = useStore(s => s.addTomorrowShortTask)
@@ -100,7 +101,7 @@ export function CardMenu({ id, type }: CardMenuProps) {
                 {(type === 'project' ? (['deep', 'short', 'maintenance'] as const) : (['short', 'maintenance'] as const))
                   .filter(tier => tier !== planItem!.tier)
                   .map(tier => (
-                    <Menu.Item key={tier} onClick={() => { removeFromTodayPlan(id); addToTodayPlan(id, type, tier) }}>
+                    <Menu.Item key={tier} onClick={() => changeTodayItemTier(id, tier)}>
                       {TIER_LABELS[tier]}
                     </Menu.Item>
                   ))}

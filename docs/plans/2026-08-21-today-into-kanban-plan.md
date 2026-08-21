@@ -758,7 +758,7 @@ interface TodayColumnProps {
 export function TodayColumn({ onOpenMeetings }: TodayColumnProps) {
   const dailyPlan = useStore(s => s.dailyPlan)
   const removeFromTodayPlan = useStore(s => s.removeFromTodayPlan)
-  const addToTodayPlan = useStore(s => s.addToTodayPlan)
+  const changeTodayItemTier = useStore(s => s.changeTodayItemTier)
   const toggleTask = useTaskToggle()
 
   const items = dailyPlan ? (dailyPlan.itemOrder ?? deriveItemOrder(dailyPlan)) : []
@@ -766,11 +766,14 @@ export function TodayColumn({ onOpenMeetings }: TodayColumnProps) {
 
   function handleTierChange(id: string, newTaskType: TaskType) {
     const tier: Tier = newTaskType === 'reminder' ? 'maintenance' : newTaskType
-    const item = items.find(i => i.id === id)
-    if (!item) return
-    removeFromTodayPlan(id)
-    addToTodayPlan(id, item.type, tier)
+    changeTodayItemTier(id, tier)
   }
+
+  // NOTE: use the `changeTodayItemTier` store action (added as part of Task 6's fix round —
+  // see that task's history) for tier changes, NOT remove-then-add via
+  // removeFromTodayPlan+addToTodayPlan. The latter silently strips pinnedItemIds/completedItemIds
+  // as a side effect of removeFromTodayPlan's cleanup, which is correct when an item actually
+  // leaves today's plan but wrong for an in-place tier reassignment.
 
   return (
     <div className="bg-border-light/60 rounded-[10px] p-4 min-h-[300px]">

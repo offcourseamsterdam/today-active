@@ -135,6 +135,50 @@ export function makeDailyPlanActions(set: StoreSet, get: StoreGet) {
       })
     },
 
+    changeTodayItemTier: (id: string, newTier: 'deep' | 'short' | 'maintenance') => {
+      const state = get()
+      const plan = state.dailyPlan
+      if (!plan) return
+      const order = plan.itemOrder ?? deriveItemOrder(plan)
+      const item = order.find(i => i.id === id)
+      if (!item || item.tier === newTier) return
+      if (newTier === 'deep' && item.type !== 'project') return
+
+      let updated: DailyPlan = plan
+
+      // Remove id from its old tier's backing field
+      if (item.tier === 'deep') {
+        updated = { ...updated, deepBlock: { projectId: '' } }
+      } else if (item.tier === 'short') {
+        updated = item.type === 'project'
+          ? { ...updated, shortProjects: updated.shortProjects.filter(p => p !== id) }
+          : { ...updated, shortTasks: updated.shortTasks.filter(t => t !== id) }
+      } else {
+        updated = item.type === 'project'
+          ? { ...updated, maintenanceProjects: updated.maintenanceProjects.filter(p => p !== id) }
+          : { ...updated, maintenanceTasks: updated.maintenanceTasks.filter(t => t !== id) }
+      }
+
+      // Add id to its new tier's backing field (evicting a prior deep project if needed —
+      // same eviction rule as addToTodayPlan, since deep can only hold one project)
+      let order2 = order
+      if (newTier === 'deep') {
+        updated = { ...updated, deepBlock: { projectId: id } }
+        order2 = order.filter(i => !(i.id !== id && i.tier === 'deep' && i.type === 'project'))
+      } else if (newTier === 'short') {
+        updated = item.type === 'project'
+          ? { ...updated, shortProjects: [...updated.shortProjects, id] }
+          : { ...updated, shortTasks: [...updated.shortTasks, id] }
+      } else {
+        updated = item.type === 'project'
+          ? { ...updated, maintenanceProjects: [...updated.maintenanceProjects, id] }
+          : { ...updated, maintenanceTasks: [...updated.maintenanceTasks, id] }
+      }
+
+      const newOrder = order2.map(i => i.id === id ? { ...i, tier: newTier } : i)
+      set({ dailyPlan: { ...updated, itemOrder: newOrder, blockOrder: deriveBlockOrder(newOrder) } })
+    },
+
     reorderTodayItems: (newOrder: PlanItem[]) => {
       const plan = get().dailyPlan
       if (!plan) return

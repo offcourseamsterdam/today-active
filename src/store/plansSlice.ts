@@ -7,15 +7,20 @@ import { deriveItemOrder, deriveBlockOrder } from '../lib/planOrder'
 function rolloverTasks(
   plan: DailyPlan,
   allTasks: readonly { id: string; status: string }[],
-): { shortTasks: string[]; maintenanceTasks: string[]; shortProjects: string[]; maintenanceProjects: string[] } {
+): { shortTasks: string[]; maintenanceTasks: string[]; shortProjects: string[]; maintenanceProjects: string[]; deepProjectId: string; pinnedItemIds: string[] } {
   const done = new Set(plan.completedItemIds ?? [])
+  const pinned = new Set(plan.pinnedItemIds ?? [])
   const taskDone = (id: string) => done.has(id) || allTasks.find(t => t.id === id)?.status === 'done'
+  const keepTask = (id: string) => pinned.has(id) || !taskDone(id)
+  const keepProject = (id: string) => pinned.has(id) || !done.has(id)
 
   return {
-    shortTasks: plan.shortTasks.filter(id => !taskDone(id)),
-    maintenanceTasks: plan.maintenanceTasks.filter(id => !taskDone(id)),
-    shortProjects: plan.shortProjects.filter(id => !done.has(id)),
-    maintenanceProjects: plan.maintenanceProjects.filter(id => !done.has(id)),
+    shortTasks: plan.shortTasks.filter(keepTask),
+    maintenanceTasks: plan.maintenanceTasks.filter(keepTask),
+    shortProjects: plan.shortProjects.filter(keepProject),
+    maintenanceProjects: plan.maintenanceProjects.filter(keepProject),
+    deepProjectId: pinned.has(plan.deepBlock.projectId) ? plan.deepBlock.projectId : '',
+    pinnedItemIds: plan.pinnedItemIds ?? [],
   }
 }
 
@@ -306,15 +311,17 @@ export function makeDailyPlanActions(set: StoreSet, get: StoreGet) {
           || carried.maintenanceTasks.length > 0
           || carried.shortProjects.length > 0
           || carried.maintenanceProjects.length > 0
+          || carried.deepProjectId !== ''
 
         const todayPlan: DailyPlan | null = hasCarry ? {
           date: today,
-          deepBlock: { projectId: '' },
+          deepBlock: { projectId: carried.deepProjectId },
           shortTasks: carried.shortTasks,
           shortProjects: carried.shortProjects,
           maintenanceTasks: carried.maintenanceTasks,
           maintenanceProjects: carried.maintenanceProjects,
           meetings: [],
+          pinnedItemIds: carried.pinnedItemIds,
           isComplete: false,
         } : null
 

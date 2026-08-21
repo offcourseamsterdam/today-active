@@ -29,14 +29,16 @@ function SidebarCard({ project }: { project: Project }) {
 
 function GoalSection({ goal, projects, onEditGoal }: {
   goal: Goal
-  projects: Project[]
+  projects: Project[]   // FULL list, not pre-filtered by status
   onEditGoal: (goal: Goal) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `goalHeader::${goal.id}`,
     data: { assignGoalId: goal.id },
   })
+  const linked = projects.filter(p => p.goalId === goal.id)
   const { done, total } = getGoalCompletion(goal, projects)
+  const displayable = linked.filter(p => p.status !== 'done')
 
   return (
     <div className="flex flex-col gap-1">
@@ -52,7 +54,7 @@ function GoalSection({ goal, projects, onEditGoal }: {
         </span>
         <span className="text-[9px] text-stone/40 shrink-0 ml-auto">{done}/{total}</span>
       </button>
-      {projects.map(p => <SidebarCard key={p.id} project={p} />)}
+      {displayable.map(p => <SidebarCard key={p.id} project={p} />)}
     </div>
   )
 }
@@ -76,7 +78,7 @@ export function WeekProjectSidebar({ projects, goals, onEditGoal }: Props) {
         <GoalSection
           key={goal.id}
           goal={goal}
-          projects={workable.filter(p => p.goalId === goal.id)}
+          projects={projects}
           onEditGoal={onEditGoal}
         />
       ))}

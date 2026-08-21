@@ -61,8 +61,9 @@ export interface VandaagState {
   processingItemErrors: Record<string, string>
   isLiveMeetingOpen: boolean
 
-  // Plan item completion
+  // Plan item completion / pinning
   togglePlanItemCompletion: (itemId: string) => void
+  togglePlanItemPinned: (itemId: string) => void
 
   // Calendar state (non-persisted)
   calendarEvents: CalendarEvent[]

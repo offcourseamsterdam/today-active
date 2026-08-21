@@ -182,6 +182,21 @@ export function makeDailyPlanActions(set: StoreSet, get: StoreGet) {
       })
     },
 
+    togglePlanItemPinned: (itemId: string) => {
+      const plan = get().dailyPlan
+      if (!plan) return
+      const pinned = plan.pinnedItemIds ?? []
+      const isPinned = pinned.includes(itemId)
+      set({
+        dailyPlan: {
+          ...plan,
+          pinnedItemIds: isPinned
+            ? pinned.filter(id => id !== itemId)
+            : [...pinned, itemId],
+        },
+      })
+    },
+
     loadTomorrowPlanIfReady: (): boolean => {
       const state = get()
       const today = getTodayString()

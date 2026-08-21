@@ -78,6 +78,8 @@ function devApiPlugin(): Plugin {
             handler = await import('./api/health')
           } else if (route === 'write-away') {
             handler = await import('./api/write-away')
+          } else if (route === 'goal-review') {
+            handler = await import('./api/goal-review')
           } else {
             res.writeHead(404)
             res.end('Not found')

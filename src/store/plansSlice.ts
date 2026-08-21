@@ -65,17 +65,14 @@ export function makeDailyPlanActions(set: StoreSet, get: StoreGet) {
       const task: Task = {
         id,
         title,
-        status: 'vandaag',
+        status: 'backlog',
+        kanbanColumn: 'in_progress',
         isRecurring: false,
         isUncomfortable: false,
         createdAt: new Date().toISOString(),
       }
-      const state = get()
-      const plan = ensureTodayPlan(state)
-      set({
-        orphanTasks: [...state.orphanTasks, task],
-        dailyPlan: { ...plan, maintenanceTasks: [...plan.maintenanceTasks, id] },
-      })
+      set(state => ({ orphanTasks: [...state.orphanTasks, task] }))
+      get().addToTodayPlan(id, 'task', 'maintenance')
       return id
     },
 

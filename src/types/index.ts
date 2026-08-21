@@ -2,7 +2,7 @@ export type Category = 'marketing' | 'ops' | 'admin' | 'finance' | 'product' | '
 
 export type ProjectStatus = 'backlog' | 'in_progress' | 'waiting' | 'done'
 
-export type TaskStatus = 'backlog' | 'vandaag' | 'done' | 'dropped'
+export type TaskStatus = 'backlog' | 'done' | 'dropped'
 
 export type RecurrenceFrequency = 'daily' | 'weekdays' | 'weekly' | 'monthly_date' | 'monthly_weekday' | 'custom' | 'annual_dates'
 

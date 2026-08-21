@@ -28,7 +28,7 @@ export function OrphanTaskModal({ task, onClose }: OrphanTaskModalProps) {
 
   const waitingEntries: WaitingOn[] = task.waitingOn ?? []
   // Derive the effective kanban column for this task
-  const effectiveCol = task.kanbanColumn ?? (task.status === 'vandaag' ? 'in_progress' : 'backlog')
+  const effectiveCol = task.kanbanColumn ?? 'backlog'
   const isTaskInProgress = effectiveCol === 'in_progress'
   const isTaskInWaiting = effectiveCol === 'waiting'
 

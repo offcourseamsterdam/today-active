@@ -51,7 +51,6 @@ const collisionStrategy: CollisionDetection = (args) => {
 // Derive which kanban column an orphan task belongs to
 function getOrphanColumn(task: Task): ProjectStatus {
   if (task.kanbanColumn) return task.kanbanColumn
-  if (task.status === 'vandaag') return 'in_progress'
   return 'backlog'
 }
 

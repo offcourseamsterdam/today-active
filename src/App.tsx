@@ -192,7 +192,7 @@ function App() {
               : 'text-stone/60 hover:text-charcoal hover:bg-border-light'}`}
         >
           <CalendarDays size={13} />
-          Week
+          Objectives
         </button>
         <button
           onClick={() => setActiveView('write-away')}

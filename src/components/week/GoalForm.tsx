@@ -40,6 +40,7 @@ export function GoalForm({ goal, onClose }: Props) {
   const [color, setColor] = useState<GoalColor>(goal?.color ?? GOAL_COLORS[0])
   const [review, setReview] = useState<GoalReviewResult | null>(null)
   const [reviewLoading, setReviewLoading] = useState(false)
+  const [reviewError, setReviewError] = useState<string | null>(null)
 
   const canSave =
     title.trim().length > 0 &&
@@ -75,6 +76,7 @@ export function GoalForm({ goal, onClose }: Props) {
   async function handleReview() {
     setReviewLoading(true)
     setReview(null)
+    setReviewError(null)
     try {
       const linkedProjectTitles = goal
         ? projects.filter(p => p.goalId === goal.id).map(p => p.title)
@@ -100,12 +102,14 @@ export function GoalForm({ goal, onClose }: Props) {
 
       if (!res.ok) {
         console.error('goal-review API error:', res.status)
+        setReviewError('Review mislukt, probeer het opnieuw.')
         return
       }
       const data = await res.json()
       setReview(data)
     } catch (err) {
       console.error('goal-review failed:', err)
+      setReviewError('Review mislukt, probeer het opnieuw.')
     } finally {
       setReviewLoading(false)
     }
@@ -129,7 +133,7 @@ export function GoalForm({ goal, onClose }: Props) {
           <label className="text-[11px] uppercase tracking-[0.05em] text-stone/50 font-medium">Titel</label>
           <input
             value={title}
-            onChange={e => setTitle(e.target.value)}
+            onChange={e => { setTitle(e.target.value); setReview(null); setReviewError(null) }}
             placeholder="Wat wil je bereiken?"
             className="px-2.5 py-1.5 rounded-[6px] border border-border bg-card text-[13px] text-charcoal
               focus:outline-none focus:border-stone/40"
@@ -142,7 +146,7 @@ export function GoalForm({ goal, onClose }: Props) {
           </label>
           <textarea
             value={description}
-            onChange={e => setDescription(e.target.value)}
+            onChange={e => { setDescription(e.target.value); setReview(null); setReviewError(null) }}
             rows={3}
             className="px-2.5 py-1.5 rounded-[6px] border border-border bg-card text-[13px] text-charcoal
               focus:outline-none focus:border-stone/40 resize-none"
@@ -155,7 +159,7 @@ export function GoalForm({ goal, onClose }: Props) {
             <input
               type="date"
               value={startDate}
-              onChange={e => setStartDate(e.target.value)}
+              onChange={e => { setStartDate(e.target.value); setReview(null); setReviewError(null) }}
               className="px-2.5 py-1.5 rounded-[6px] border border-border bg-card text-[13px] text-charcoal"
             />
           </div>
@@ -164,7 +168,7 @@ export function GoalForm({ goal, onClose }: Props) {
             <input
               type="date"
               value={targetDate}
-              onChange={e => setTargetDate(e.target.value)}
+              onChange={e => { setTargetDate(e.target.value); setReview(null); setReviewError(null) }}
               className="px-2.5 py-1.5 rounded-[6px] border border-border bg-card text-[13px] text-charcoal"
             />
           </div>
@@ -178,7 +182,7 @@ export function GoalForm({ goal, onClose }: Props) {
             type="number"
             min={1}
             value={targetDaysWorked}
-            onChange={e => setTargetDaysWorked(e.target.value)}
+            onChange={e => { setTargetDaysWorked(e.target.value); setReview(null); setReviewError(null) }}
             placeholder="bv. 20"
             className="px-2.5 py-1.5 rounded-[6px] border border-border bg-card text-[13px] text-charcoal w-24"
           />
@@ -207,6 +211,10 @@ export function GoalForm({ goal, onClose }: Props) {
           >
             {reviewLoading ? 'Beoordelen…' : 'Review objective'}
           </button>
+
+          {reviewError && (
+            <div className="text-[11px] text-red">{reviewError}</div>
+          )}
 
           {review && (
             <div className="flex flex-col gap-1.5 rounded-[8px] border border-border bg-border-light/40 p-3">

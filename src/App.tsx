@@ -21,7 +21,6 @@ import { WriteAwayModal } from './components/writeaway/WriteAwayModal'
 
 // Lazy-loaded heavy components
 const PhilosophyPage = lazy(() => import('./components/philosophy/PhilosophyPage').then(m => ({ default: m.PhilosophyPage })))
-const PlanningModal = lazy(() => import('./components/planning/PlanningModal').then(m => ({ default: m.PlanningModal })))
 const LiveMeetingView = lazy(() => import('./components/meetings/LiveMeetingView').then(m => ({ default: m.LiveMeetingView })))
 const MeetingsPage = lazy(() => import('./components/meetings/MeetingsPage').then(m => ({ default: m.MeetingsPage })))
 const RecurringTasksDrawer = lazy(() => import('./components/ui/RecurringTasksDrawer').then(m => ({ default: m.RecurringTasksDrawer })))
@@ -53,7 +52,6 @@ function App() {
   const tickMeetingSession = useStore(s => s.tickMeetingSession)
   const [showEnough, setShowEnough] = useState(false)
   const [showTomorrowPeek, setShowTomorrowPeek] = useState(false)
-  const [showPlanTodayModal, setShowPlanTodayModal] = useState(false)
   const [showAddTaskModal, setShowAddTaskModal] = useState(false)
   const [showAddProjectModal, setShowAddProjectModal] = useState(false)
   const [showRecurringDrawer, setShowRecurringDrawer] = useState(false)
@@ -226,7 +224,6 @@ function App() {
         onAddTask={() => setShowAddTaskModal(true)}
         onAddProject={() => setShowAddProjectModal(true)}
         onOpenRecurringTasks={() => setShowRecurringDrawer(true)}
-        onPlanToday={() => setShowPlanTodayModal(true)}
         onPlanTomorrow={() => setShowTomorrowPeek(true)}
         onMyRules={() => setActiveView('philosophy')}
         onSignIn={signIn}
@@ -236,7 +233,6 @@ function App() {
       />
       <Suspense fallback={null}>
         {showRecurringDrawer && <RecurringTasksDrawer open onClose={() => setShowRecurringDrawer(false)} />}
-        {showPlanTodayModal && <PlanningModal day="today" onClose={() => setShowPlanTodayModal(false)} />}
       </Suspense>
 
       {/* Project modal — openable from any view */}

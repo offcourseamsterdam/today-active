@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Plus, Calendar, CheckSquare, FolderPlus, BookOpen, Cloud, LogOut, RotateCcw } from 'lucide-react'
-// Calendar import kept for Plan today/tomorrow actions
+// Calendar import kept for the Plan tomorrow action
 import { useStore } from '../../store'
 
 interface SmartFabProps {
   onAddTask: () => void
   onAddProject: () => void
   onOpenRecurringTasks: () => void
-  onPlanToday: () => void
   onPlanTomorrow: () => void
   onMyRules: () => void
   onSignIn: () => void
@@ -20,7 +19,6 @@ export function SmartFab({
   onAddTask,
   onAddProject,
   onOpenRecurringTasks,
-  onPlanToday,
   onPlanTomorrow,
   onMyRules,
   onSignIn,
@@ -28,7 +26,6 @@ export function SmartFab({
   isSignedIn,
   onBackToMeeting,
 }: SmartFabProps) {
-  const dailyPlan = useStore(s => s.dailyPlan)
   const tomorrowPlan = useStore(s => s.tomorrowPlan)
   const meetingSession = useStore(s => s.meetingSession)
   const meetings = useStore(s => s.meetings)
@@ -42,9 +39,6 @@ export function SmartFab({
     return () => clearInterval(id)
   }, [])
 
-  const isPlanned = !!(
-    dailyPlan?.deepBlock.projectId || (dailyPlan?.shortTasks.length ?? 0) > 0
-  )
   const isTomorrowPlanned = !!(tomorrowPlan?.isComplete)
   const isAfterThree = hour >= 15
 
@@ -56,13 +50,11 @@ export function SmartFab({
     : null
 
   const label = meetingLabel
-    ?? (!isPlanned ? 'Plan today' : isAfterThree && !isTomorrowPlanned ? 'Plan tomorrow?' : null)
+    ?? (isAfterThree && !isTomorrowPlanned ? 'Plan tomorrow?' : null)
 
   function handlePrimaryClick() {
     if (meetingLabel) {
       onBackToMeeting()
-    } else if (label === 'Plan today') {
-      onPlanToday()
     } else if (label === 'Plan tomorrow?') {
       onPlanTomorrow()
     } else {
@@ -71,9 +63,7 @@ export function SmartFab({
   }
 
   function handleFabClick() {
-    if (label === 'Plan today') {
-      onPlanToday()
-    } else if (label === 'Plan tomorrow?') {
+    if (label === 'Plan tomorrow?') {
       onPlanTomorrow()
     } else {
       // meetingLabel active or no label: always open the menu
@@ -82,7 +72,6 @@ export function SmartFab({
   }
 
   const actions = [
-    { icon: <Calendar size={14} />, label: 'Plan today', action: onPlanToday },
     { icon: <Calendar size={14} />, label: 'Plan tomorrow', action: onPlanTomorrow },
     { icon: <CheckSquare size={14} />, label: 'New task', action: onAddTask },
     { icon: <RotateCcw size={14} />, label: 'Recurring tasks', action: onOpenRecurringTasks },

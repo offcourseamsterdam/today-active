@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, lazy, Suspense } from 'react'
 import { format } from 'date-fns'
-import { Cloud, CloudOff, Loader2, CloudAlert, Calendar, ClipboardCheck } from 'lucide-react'
+import { Cloud, CloudOff, Loader2, CloudAlert, Calendar, ClipboardCheck, LayoutGrid, CalendarDays, PenLine } from 'lucide-react'
 import { SharedProjectPage } from './components/shared/SharedProjectPage'
 import { EnsoLogo } from './components/ui/EnsoLogo'
 import { KanbanBoard } from './components/kanban/KanbanBoard'
@@ -161,6 +161,7 @@ function App() {
               ? 'bg-charcoal text-[#FAF9F7]'
               : 'text-stone/60 hover:text-charcoal hover:bg-border-light'}`}
         >
+          <LayoutGrid size={13} />
           Projects
         </button>
         <button
@@ -190,6 +191,7 @@ function App() {
               ? 'bg-charcoal text-[#FAF9F7]'
               : 'text-stone/60 hover:text-charcoal hover:bg-border-light'}`}
         >
+          <CalendarDays size={13} />
           Week
         </button>
         <button
@@ -199,6 +201,7 @@ function App() {
               ? 'bg-charcoal text-[#FAF9F7]'
               : 'text-stone/60 hover:text-charcoal hover:bg-border-light'}`}
         >
+          <PenLine size={13} />
           Write Away
         </button>
       </nav>

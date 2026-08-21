@@ -20,6 +20,7 @@ function extractSyncData(): SyncData {
     tomorrowPlan: s.tomorrowPlan,
     planHistory: s.planHistory,
     weekSlots: s.weekSlots,
+    goals: s.goals,
     personalRules: s.personalRules,
     writeAway: s.writeAwayEntries,
     syncedAt: new Date().toISOString(),
@@ -80,6 +81,7 @@ export function useFirestoreSync(user: User | null): SyncStatus {
               tomorrowPlan: remote.tomorrowPlan ?? null,
               planHistory: remote.planHistory ?? {},
               weekSlots: remote.weekSlots ?? {},
+              goals: remote.goals ?? [],
               personalRules: remote.personalRules ?? [],
               writeAwayEntries: remote.writeAway ?? [],
             })

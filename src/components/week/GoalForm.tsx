@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../../store'
+import { getTodayString } from '../../store/helpers'
 import { GOAL_COLORS, type Goal, type GoalColor } from '../../types'
 
 interface Props {
@@ -14,14 +15,19 @@ export function GoalForm({ goal, onClose }: Props) {
 
   const [title, setTitle] = useState(goal?.title ?? '')
   const [description, setDescription] = useState(goal?.description ?? '')
-  const [startDate, setStartDate] = useState(goal?.startDate ?? new Date().toISOString().slice(0, 10))
+  const [startDate, setStartDate] = useState(goal?.startDate ?? getTodayString())
   const [targetDate, setTargetDate] = useState(goal?.targetDate ?? '')
   const [targetDaysWorked, setTargetDaysWorked] = useState(
     goal?.targetDaysWorked ? String(goal.targetDaysWorked) : ''
   )
   const [color, setColor] = useState<GoalColor>(goal?.color ?? GOAL_COLORS[0])
 
-  const canSave = title.trim().length > 0 && targetDate.length > 0
+  const canSave =
+    title.trim().length > 0 &&
+    startDate.length > 0 &&
+    targetDate.length > 0 &&
+    targetDate >= startDate &&
+    (targetDaysWorked === '' || Number(targetDaysWorked) > 0)
 
   function handleSave() {
     if (!canSave) return

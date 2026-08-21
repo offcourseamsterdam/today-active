@@ -2,16 +2,33 @@ import { useState } from 'react'
 import { useStore } from '../../store'
 import { getTodayString } from '../../store/helpers'
 import { GOAL_COLORS, type Goal, type GoalColor } from '../../types'
+import { isGoalActive } from '../../lib/goals'
 
 interface Props {
   goal: Goal | null   // null = creating a new goal
   onClose: () => void
 }
 
+interface SmartCheck {
+  pass: boolean
+  note: string
+}
+
+interface GoalReviewResult {
+  specific: SmartCheck
+  measurable: SmartCheck
+  achievable: SmartCheck
+  relevant: SmartCheck
+  timeBound: SmartCheck
+}
+
 export function GoalForm({ goal, onClose }: Props) {
   const addGoal = useStore(s => s.addGoal)
   const updateGoal = useStore(s => s.updateGoal)
   const deleteGoal = useStore(s => s.deleteGoal)
+  const allGoals = useStore(s => s.goals)
+  const projects = useStore(s => s.projects)
+  const personalRules = useStore(s => s.personalRules)
 
   const [title, setTitle] = useState(goal?.title ?? '')
   const [description, setDescription] = useState(goal?.description ?? '')
@@ -21,6 +38,8 @@ export function GoalForm({ goal, onClose }: Props) {
     goal?.targetDaysWorked ? String(goal.targetDaysWorked) : ''
   )
   const [color, setColor] = useState<GoalColor>(goal?.color ?? GOAL_COLORS[0])
+  const [review, setReview] = useState<GoalReviewResult | null>(null)
+  const [reviewLoading, setReviewLoading] = useState(false)
 
   const canSave =
     title.trim().length > 0 &&
@@ -51,6 +70,45 @@ export function GoalForm({ goal, onClose }: Props) {
     if (!goal) return
     deleteGoal(goal.id)
     onClose()
+  }
+
+  async function handleReview() {
+    setReviewLoading(true)
+    setReview(null)
+    try {
+      const linkedProjectTitles = goal
+        ? projects.filter(p => p.goalId === goal.id).map(p => p.title)
+        : []
+      const otherActiveGoalTitles = allGoals
+        .filter(g => g.id !== goal?.id && isGoalActive(g))
+        .map(g => g.title)
+
+      const res = await fetch('/api/goal-review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          description,
+          startDate,
+          targetDate,
+          targetDaysWorked: targetDaysWorked ? Number(targetDaysWorked) : undefined,
+          linkedProjectTitles,
+          otherActiveGoalTitles,
+          personalRules,
+        }),
+      })
+
+      if (!res.ok) {
+        console.error('goal-review API error:', res.status)
+        return
+      }
+      const data = await res.json()
+      setReview(data)
+    } catch (err) {
+      console.error('goal-review failed:', err)
+    } finally {
+      setReviewLoading(false)
+    }
   }
 
   return (
@@ -138,6 +196,41 @@ export function GoalForm({ goal, onClose }: Props) {
               aria-label={`Kies kleur ${c}`}
             />
           ))}
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={handleReview}
+            disabled={!canSave || reviewLoading}
+            className="self-start px-3 py-1.5 text-[12px] rounded-[6px] border border-border text-stone/70
+              hover:text-charcoal hover:border-stone/40 transition-colors disabled:opacity-40"
+          >
+            {reviewLoading ? 'Beoordelen…' : 'Review objective'}
+          </button>
+
+          {review && (
+            <div className="flex flex-col gap-1.5 rounded-[8px] border border-border bg-border-light/40 p-3">
+              {(
+                [
+                  ['specific', 'Specific'],
+                  ['measurable', 'Measurable'],
+                  ['achievable', 'Achievable'],
+                  ['relevant', 'Relevant'],
+                  ['timeBound', 'Time-bound'],
+                ] as const
+              ).map(([key, label]) => (
+                <div key={key} className="flex gap-2 text-[11px]">
+                  <span className={review[key].pass ? 'text-green' : 'text-red'}>
+                    {review[key].pass ? '✓' : '✗'}
+                  </span>
+                  <span>
+                    <span className="font-medium text-charcoal">{label}:</span>{' '}
+                    <span className="text-stone/70">{review[key].note ?? ''}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between pt-2 border-t border-border">

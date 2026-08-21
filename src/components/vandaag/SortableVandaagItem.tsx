@@ -8,6 +8,7 @@ import type { PlanItem, TaskType } from '../../types'
 import { findTaskById } from '../../lib/taskLookup'
 import { TaskCheckbox } from '../ui/TaskCheckbox'
 import { TierBadge } from '../planning/TierBadge'
+import { CardMenu } from '../kanban/CardMenu'
 import { MeetingInlineCard } from '../meetings/MeetingInlineCard'
 import { useVandaagDark } from './VandaagDarkContext'
 
@@ -58,8 +59,9 @@ export function SortableVandaagItem({
       ref={setNodeRef}
       style={style}
       {...attributes}
-      className={`rounded-[8px] border transition-all duration-300 group
+      className={`rounded-[8px] border transition-all duration-500 group
         ${isDragging ? 'shadow-lg scale-[1.02] z-10 opacity-80' : ''}
+        ${item.type === 'project' && isItemCompleted ? 'opacity-0 max-h-0 scale-95 -mt-2 overflow-hidden pointer-events-none' : 'opacity-100 max-h-[200px]'}
         ${dark
           ? 'bg-citadel-text/[0.03] border-citadel-text/8'
           : `bg-card border-border/50 ${isDeep ? 'border-charcoal/15' : ''}`
@@ -155,6 +157,7 @@ export function SortableVandaagItem({
           </button>
         )}
 
+        {item.type !== 'meeting' && <CardMenu id={item.id} type={item.type} />}
         {/* Remove button */}
         <button
           onClick={() => onRemove(item.id)}

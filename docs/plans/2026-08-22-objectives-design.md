@@ -20,8 +20,8 @@ Prerequisite: this design targets the Kanban-home model from the today-into-kanb
 Rename the "Week" nav tab to **"Objectives."** Same view (`WeekPlannerView`, renamed accordingly), extended with a goals strip; the existing 7-day drag-and-drop grid is unchanged.
 
 - **Goals strip** — new, across the top of the view. One chip per active goal: title, both progress indicators (see below), target date.
-- **Day grid** — unchanged. Past days read-only from `planHistory`, today from `dailyPlan`, future days editable via `weekSlots`.
-- **Project sidebar** — currently grouped by status (Actief/Backlog). Changes to grouped-by-goal: each goal a collapsible section (title + both progress indicators), its linked projects listed underneath as drag sources, an "Unassigned" section at the bottom for projects with no `goalId`. Drag-to-day behavior is unchanged.
+- **Day grid** — mechanics unchanged (past days read-only from `planHistory`, today from `dailyPlan`, future days editable via `weekSlots`). What changes: `WeekProjectCard` gets a small goal-color indicator (dot or left edge) whenever `project.goalId` is set. This is the point of the whole feature — at a glance, the grid answers not just "what am I doing which day" but "which goal is that day's work actually serving." Projects with no goal show no indicator, which is itself a visible signal (unassigned work sitting on the calendar).
+- **Project sidebar** — currently grouped by status (Actief/Backlog). Changes to grouped-by-goal: each goal a collapsible section (title + both progress indicators, accented with the goal's color), its linked projects listed underneath as drag sources, an "Unassigned" section at the bottom for projects with no `goalId`. Drag-to-day behavior is unchanged.
 
 Projects remain the only draggable unit on this view — tasks are explicitly out of scope, matching the original weekplanner design's scoping.
 
@@ -39,6 +39,7 @@ export interface Goal {
   startDate: string           // YYYY-MM-DD
   targetDate: string          // YYYY-MM-DD
   targetDaysWorked?: number   // optional effort target, e.g. 20
+  color: string                // small fixed palette; ties sidebar section, strip chip, and day-grid card indicator together visually
   createdAt: string
   updatedAt: string
 }
@@ -122,8 +123,9 @@ There is no stored "business strategy" document anywhere in the app to check goa
 |---|---|
 | `WeekPlannerView` → conceptually "Objectives" | Add goals strip above existing grid |
 | `WeekProjectSidebar` | Regroup by `goalId` instead of `status`; add "Unassigned" bucket |
+| `WeekProjectCard` | Add goal-color indicator (dot/edge) when `project.goalId` is set — the grid, not just the sidebar, shows goal linkage |
 | `GoalChip` (new) | Strip item: title, completion + effort progress, target date |
-| `GoalForm` (new) | Create/edit modal: title, description, dates, target days, "Review objective" button + checklist result |
+| `GoalForm` (new) | Create/edit modal: title, description, dates, target days, color, "Review objective" button + checklist result |
 | `api/goal-review.ts` (new) | SMART-review endpoint |
 | `goalsSlice.ts` (new) | `goals` state + CRUD actions |
 

@@ -4,6 +4,21 @@ import type { StoreSet, StoreGet } from './types'
 import { ensureTodayPlan, ensureTomorrowPlan, getTodayString, makePlanActions } from './helpers'
 import { deriveItemOrder, deriveBlockOrder } from '../lib/planOrder'
 
+function countShortSlots(
+  plan: DailyPlan,
+  meetings: readonly { id: string; durationMinutes: number }[],
+  recurringMeetings: readonly { id: string; durationMinutes: number }[],
+): number {
+  const order = plan.itemOrder ?? deriveItemOrder(plan)
+  return order.filter(i => i.tier === 'short').reduce((sum, i) => {
+    if (i.type === 'meeting') {
+      const m = [...meetings, ...recurringMeetings].find(m => m.id === i.id)
+      return sum + Math.ceil((m?.durationMinutes ?? 60) / 60)
+    }
+    return sum + 1
+  }, 0)
+}
+
 function rolloverTasks(
   plan: DailyPlan,
   allTasks: readonly { id: string; status: string }[],
@@ -86,6 +101,11 @@ export function makeDailyPlanActions(set: StoreSet, get: StoreGet) {
       const order = plan.itemOrder ?? deriveItemOrder(plan)
       if (order.some(i => i.id === id)) return
 
+      if (tier === 'short') {
+        const currentSlots = countShortSlots(plan, state.meetings, state.recurringMeetings)
+        if (currentSlots + 1 > 3) return
+      }
+
       let updated: DailyPlan = plan
       let newOrder: PlanItem[]
       if (tier === 'deep' && type === 'project') {
@@ -140,6 +160,12 @@ export function makeDailyPlanActions(set: StoreSet, get: StoreGet) {
       const item = order.find(i => i.id === id)
       if (!item || item.tier === newTier) return
       if (newTier === 'deep' && item.type !== 'project') return
+      if (newTier === 'short') {
+        // item is guaranteed not already in 'short' (early-returned above when tiers match),
+        // so the current count excludes it and adding 1 for the move is correct.
+        const currentSlots = countShortSlots(plan, state.meetings, state.recurringMeetings)
+        if (currentSlots + 1 > 3) return
+      }
 
       let updated: DailyPlan = plan
 

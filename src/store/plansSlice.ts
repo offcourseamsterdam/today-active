@@ -2,6 +2,7 @@ import { v4 as uuid } from 'uuid'
 import type { DailyPlan, Task, PlanItem } from '../types'
 import type { StoreSet, StoreGet } from './types'
 import { ensureTodayPlan, ensureTomorrowPlan, getTodayString, makePlanActions } from './helpers'
+import { deriveItemOrder, deriveBlockOrder } from '../lib/planOrder'
 
 function rolloverTasks(
   plan: DailyPlan,
@@ -71,6 +72,58 @@ export function makeDailyPlanActions(set: StoreSet, get: StoreGet) {
         dailyPlan: { ...plan, maintenanceTasks: [...plan.maintenanceTasks, id] },
       })
       return id
+    },
+
+    addToTodayPlan: (id: string, type: PlanItem['type'], tier: 'deep' | 'short' | 'maintenance') => {
+      const state = get()
+      const plan = ensureTodayPlan(state)
+      const order = plan.itemOrder ?? deriveItemOrder(plan)
+      if (order.some(i => i.id === id)) return
+
+      let updated: DailyPlan = plan
+      if (tier === 'deep' && type === 'project') {
+        updated = { ...updated, deepBlock: { projectId: id } }
+      } else if (tier === 'short') {
+        updated = type === 'project'
+          ? { ...updated, shortProjects: [...updated.shortProjects, id] }
+          : { ...updated, shortTasks: [...updated.shortTasks, id] }
+      } else if (tier === 'maintenance') {
+        updated = type === 'project'
+          ? { ...updated, maintenanceProjects: [...updated.maintenanceProjects, id] }
+          : { ...updated, maintenanceTasks: [...updated.maintenanceTasks, id] }
+      }
+
+      const newOrder = [...order, { id, type, tier }]
+      set({
+        dailyPlan: { ...updated, itemOrder: newOrder, blockOrder: deriveBlockOrder(newOrder) },
+      })
+    },
+
+    removeFromTodayPlan: (id: string) => {
+      const state = get()
+      const plan = state.dailyPlan
+      if (!plan) return
+      const order = (plan.itemOrder ?? deriveItemOrder(plan)).filter(i => i.id !== id)
+      set({
+        dailyPlan: {
+          ...plan,
+          deepBlock: plan.deepBlock.projectId === id ? { projectId: '' } : plan.deepBlock,
+          shortTasks: plan.shortTasks.filter(t => t !== id),
+          shortProjects: plan.shortProjects.filter(p => p !== id),
+          maintenanceTasks: plan.maintenanceTasks.filter(t => t !== id),
+          maintenanceProjects: plan.maintenanceProjects.filter(p => p !== id),
+          completedItemIds: (plan.completedItemIds ?? []).filter(cid => cid !== id),
+          pinnedItemIds: (plan.pinnedItemIds ?? []).filter(pid => pid !== id),
+          itemOrder: order,
+          blockOrder: deriveBlockOrder(order),
+        },
+      })
+    },
+
+    reorderTodayItems: (newOrder: PlanItem[]) => {
+      const plan = get().dailyPlan
+      if (!plan) return
+      set({ dailyPlan: { ...plan, itemOrder: newOrder, blockOrder: deriveBlockOrder(newOrder) } })
     },
 
     completeDailyPlan: () => {

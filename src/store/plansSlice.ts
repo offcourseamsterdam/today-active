@@ -288,11 +288,27 @@ export function makeDailyPlanActions(set: StoreSet, get: StoreGet) {
 
       // 1. Try to promote tomorrow's plan first
       if (state.tomorrowPlan && state.tomorrowPlan.date === today) {
+        let promoted = state.tomorrowPlan
         if (state.dailyPlan && state.dailyPlan.date !== today) {
-          set({ planHistory: { ...state.planHistory, [state.dailyPlan.date]: state.dailyPlan } })
+          const stale = state.dailyPlan
+          const carried = rolloverTasks(stale, allTasks)
+          promoted = {
+            ...promoted,
+            shortTasks: Array.from(new Set([...promoted.shortTasks, ...carried.shortTasks])),
+            shortProjects: Array.from(new Set([...promoted.shortProjects, ...carried.shortProjects])),
+            maintenanceTasks: Array.from(new Set([...promoted.maintenanceTasks, ...carried.maintenanceTasks])),
+            maintenanceProjects: Array.from(new Set([...promoted.maintenanceProjects, ...carried.maintenanceProjects])),
+            deepBlock: promoted.deepBlock.projectId
+              ? promoted.deepBlock
+              : (carried.deepProjectId ? { projectId: carried.deepProjectId } : promoted.deepBlock),
+            pinnedItemIds: Array.from(new Set([...(carried.pinnedItemIds ?? []), ...(promoted.pinnedItemIds ?? [])])),
+            itemOrder: undefined,
+            blockOrder: undefined,
+          }
+          set({ planHistory: { ...state.planHistory, [stale.date]: stale } })
         }
         set({
-          dailyPlan: { ...state.tomorrowPlan, isComplete: false, completedAt: undefined },
+          dailyPlan: { ...promoted, isComplete: false, completedAt: undefined },
           tomorrowPlan: null,
         })
         return

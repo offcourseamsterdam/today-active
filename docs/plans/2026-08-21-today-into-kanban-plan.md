@@ -766,14 +766,29 @@ export function TodayColumn({ onOpenMeetings }: TodayColumnProps) {
 
   function handleTierChange(id: string, newTaskType: TaskType) {
     const tier: Tier = newTaskType === 'reminder' ? 'maintenance' : newTaskType
+    const item = items.find(i => i.id === id)
+    if (!item) return
+    if (item.type === 'meeting') {
+      // changeTodayItemTier only handles project/task — meetings keep using their
+      // existing dedicated per-tier actions (setDeepMeeting/addShortMeeting/
+      // removeShortMeeting/addMaintenanceMeeting/removeMaintenanceMeeting), matching
+      // what the old DailyPlanList.handleTierChange already did for meetings.
+      // Wire those actions into TodayColumn and branch here — remove id from its
+      // current meeting field, add it to the new one. Don't extend
+      // changeTodayItemTier for meetings; deep-tier meetings coexist with a deep
+      // project (see deriveItemOrder), which adds eviction-rule complexity that
+      // belongs with the meeting-specific actions, not the project/task action.
+      return
+    }
     changeTodayItemTier(id, tier)
   }
 
   // NOTE: use the `changeTodayItemTier` store action (added as part of Task 6's fix round —
-  // see that task's history) for tier changes, NOT remove-then-add via
+  // see that task's history) for project/task tier changes, NOT remove-then-add via
   // removeFromTodayPlan+addToTodayPlan. The latter silently strips pinnedItemIds/completedItemIds
   // as a side effect of removeFromTodayPlan's cleanup, which is correct when an item actually
-  // leaves today's plan but wrong for an in-place tier reassignment.
+  // leaves today's plan but wrong for an in-place tier reassignment. changeTodayItemTier does NOT
+  // handle item.type === 'meeting' — see the guard above.
 
   return (
     <div className="bg-border-light/60 rounded-[10px] p-4 min-h-[300px]">

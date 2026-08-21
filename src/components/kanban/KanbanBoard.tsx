@@ -80,7 +80,6 @@ export function KanbanBoard({
   const dailyPlan = useStore(s => s.dailyPlan)
   const addToTodayPlan = useStore(s => s.addToTodayPlan)
   const reorderTodayItems = useStore(s => s.reorderTodayItems)
-  const changeTodayItemTier = useStore(s => s.changeTodayItemTier)
 
   const [activeProject, setActiveProject] = useState<Project | null>(null)
   const [activeOrphanTask, setActiveOrphanTask] = useState<Task | null>(null)
@@ -115,15 +114,7 @@ export function KanbanBoard({
     [projects, selectedContextId]
   )
 
-  // Tier-grouped (deep, then short, then maintenance) to match TodayColumn's single
-  // shared SortableContext render order — raw dailyPlan.itemOrder can interleave tiers
-  // as items get added over time, which would desync index math here from what's
-  // actually rendered/draggable in TodayColumn.
-  const orderedTodayItems = dailyPlan
-    ? (['deep', 'short', 'maintenance'] as const).flatMap(
-        t => (dailyPlan.itemOrder ?? deriveItemOrder(dailyPlan)).filter(i => i.tier === t)
-      )
-    : []
+  const orderedTodayItems = dailyPlan ? (dailyPlan.itemOrder ?? deriveItemOrder(dailyPlan)) : []
 
   const getProjectsByStatus = useCallback(
     (status: ProjectStatus) => visibleProjects.filter(p => p.status === status),
@@ -254,64 +245,30 @@ export function KanbanBoard({
     const overId = over.id as string
     if (activeId === overId) return
 
-    // --- Reorder / retier within Today ---
+    // --- Reorder within Today (free-form — tier no longer dictates position;
+    // tier itself is only ever changed via the row's tier badge / CardMenu, not drag) ---
     if (wasPlanItem) {
-      const activeItem = orderedTodayItems.find(i => `plan-${i.id}` === activeId)
-      if (!activeItem) return
-
-      // Resolve the drop target's tier: either a tier zone's own id, or another
-      // Today item's id (adopt that item's tier — same nested-droppable fallback
-      // pattern used below for external drops into Today).
-      const overItem = overId.startsWith('plan-')
-        ? orderedTodayItems.find(i => `plan-${i.id}` === overId)
-        : null
-      const targetTier = overId === 'today-deep' ? 'deep'
-        : overId === 'today-short' ? 'short'
-        : overId === 'today-maintenance' ? 'maintenance'
-        : overItem ? overItem.tier
-        : null
-      if (!targetTier) return
-
-      if (activeItem.tier === targetTier) {
-        // Same-tier reorder — unchanged behavior from before.
-        if (!overItem) return
-        const oldIndex = orderedTodayItems.findIndex(i => `plan-${i.id}` === activeId)
-        const newIndex = orderedTodayItems.findIndex(i => `plan-${i.id}` === overId)
-        if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return
-        reorderTodayItems(arrayMove(orderedTodayItems, oldIndex, newIndex))
-        return
-      }
-
-      // Cross-tier drag — reassign the item's tier directly. This is now a first-class
-      // way to reprioritize (per user feedback), not a rejected accident. changeTodayItemTier
-      // already enforces the deep-tier cap (evicting a prior deep project) and rejects
-      // moving a task into deep, so those rules apply automatically here too.
-      changeTodayItemTier(activeItem.id, targetTier)
+      if (!overId.startsWith('plan-')) return
+      const oldIndex = orderedTodayItems.findIndex(i => `plan-${i.id}` === activeId)
+      const newIndex = orderedTodayItems.findIndex(i => `plan-${i.id}` === overId)
+      if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return
+      reorderTodayItems(arrayMove(orderedTodayItems, oldIndex, newIndex))
       return
     }
 
-    // --- Drop a project/orphan task into a Today tier zone ---
-    // overId may be the tier zone's own droppable id (empty zone) or, once the tier has
-    // items, an existing item's sortable id (`plan-*`) — same nested-droppable ambiguity
-    // the kanban column-vs-card lookups below already handle, so fall back to the
-    // hovered item's tier in that case. By this point `wasPlanItem` is false (that
-    // branch already returned above), so a `plan-*` overId here unambiguously means
-    // "dropping onto an existing Today item," not a reorder.
+    // --- Drop a project/orphan task into Today ---
+    // Single drop zone (`today-all`) now, or dropping directly onto an existing
+    // Today item (`plan-*`, same nested-droppable fallback used elsewhere in this
+    // file). New items default to the maintenance tier (uncapped, always succeeds)
+    // — re-tier afterward via the row's tier badge or CardMenu if needed.
     const overPlanItem = overId.startsWith('plan-')
       ? orderedTodayItems.find(i => `plan-${i.id}` === overId)
       : null
-    const todayTier = overId === 'today-deep' ? 'deep'
-      : overId === 'today-short' ? 'short'
-      : overId === 'today-maintenance' ? 'maintenance'
-      : overPlanItem ? overPlanItem.tier
-      : null
-    if (todayTier) {
+    if (overId === 'today-all' || overPlanItem) {
       if (wasOrphan) {
-        // Tasks can't be deep (mirrors addToTodayPlan's own guard and TierBadge's rule) —
-        // dropping an orphan task on the deep zone is a silent no-op, not an error.
-        if (todayTier !== 'deep') addToTodayPlan(activeId, 'task', todayTier)
+        addToTodayPlan(activeId, 'task', 'maintenance')
       } else {
-        addToTodayPlan(activeId, 'project', todayTier)
+        addToTodayPlan(activeId, 'project', 'maintenance')
       }
       return
     }

@@ -1,4 +1,4 @@
-import { format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { nl } from 'date-fns/locale'
 import { getGoalCompletion, getGoalDaysWorked } from '../../lib/goals'
 import type { Goal, Project } from '../../types'
@@ -13,7 +13,7 @@ export function GoalChip({ goal, projects, onClick }: Props) {
   const { done, total } = getGoalCompletion(goal, projects)
   const daysWorked = getGoalDaysWorked(goal, projects)
   const completionPct = total > 0 ? Math.round((done / total) * 100) : 0
-  const targetLabel = format(new Date(goal.targetDate), 'd MMM', { locale: nl })
+  const targetLabel = format(parseISO(goal.targetDate), 'd MMM', { locale: nl })
 
   return (
     <button
@@ -25,7 +25,7 @@ export function GoalChip({ goal, projects, onClick }: Props) {
         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: goal.color }} />
         <span className="text-[12px] font-medium text-charcoal truncate">{goal.title}</span>
       </div>
-      <div className="text-[10px] text-stone/60">
+      <div className="text-[10px] text-stone/60 truncate">
         {total > 0 ? `${done}/${total} projecten` : 'nog geen projecten'} · doel {targetLabel}
       </div>
       <div className="h-1 rounded-full bg-border overflow-hidden">
@@ -34,7 +34,7 @@ export function GoalChip({ goal, projects, onClick }: Props) {
           style={{ width: `${completionPct}%`, backgroundColor: goal.color }}
         />
       </div>
-      {goal.targetDaysWorked && (
+      {goal.targetDaysWorked != null && (
         <div className="text-[10px] text-stone/50">
           {daysWorked}/{goal.targetDaysWorked} dagen gewerkt
         </div>

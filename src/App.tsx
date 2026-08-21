@@ -115,7 +115,7 @@ function App() {
     return (
       <NewDayScreen
         onStart={() => setGreetedDate(todayStr)}
-        onPlan={() => { setGreetedDate(todayStr); setPlanningDay('today'); setActiveView('planning') }}
+        onPlan={() => setGreetedDate(todayStr)}
       />
     )
   }

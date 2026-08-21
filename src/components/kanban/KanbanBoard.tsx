@@ -13,7 +13,7 @@ import {
   type DragOverEvent,
   type CollisionDetection,
 } from '@dnd-kit/core'
-import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
+import { sortableKeyboardCoordinates, arrayMove } from '@dnd-kit/sortable'
 import { useStore } from '../../store'
 import { KanbanColumn } from './KanbanColumn'
 import { BacklogColumn } from './BacklogColumn'
@@ -25,7 +25,9 @@ import { ProjectModal } from './ProjectModal'
 import { AddProjectModal } from './AddProjectModal'
 import { AddTaskModal } from './AddTaskModal'
 import { DoneListColumn } from './DoneListColumn'
-import { KANBAN_COLUMNS, type Project, type ProjectStatus, type Task } from '../../types'
+import { TodayColumn } from './TodayColumn'
+import { KANBAN_COLUMNS, type Project, type ProjectStatus, type Task, type PlanItem } from '../../types'
+import { deriveItemOrder } from '../../lib/planOrder'
 import { OrphanTaskModal } from './OrphanTaskModal'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 
@@ -38,6 +40,7 @@ interface KanbanBoardProps {
   onExternalAddTaskClose?: () => void
   externalAddProject?: boolean
   onExternalAddProjectClose?: () => void
+  onOpenMeetings?: () => void
 }
 
 // Custom collision detection: pointerWithin (accurate for columns) → closestCorners fallback
@@ -61,6 +64,7 @@ export function KanbanBoard({
   onExternalAddTaskClose,
   externalAddProject = false,
   onExternalAddProjectClose,
+  onOpenMeetings,
 }: KanbanBoardProps) {
   const projects = useStore(s => s.projects)
   const orphanTasks = useStore(s => s.orphanTasks)
@@ -77,9 +81,13 @@ export function KanbanBoard({
   const deleteOrphanTask = useStore(s => s.deleteOrphanTask)
   const moveOrphanTaskToProject = useStore(s => s.moveOrphanTaskToProject)
   const contexts = useStore(s => s.settings.contexts) ?? EMPTY_CONTEXTS
+  const dailyPlan = useStore(s => s.dailyPlan)
+  const addToTodayPlan = useStore(s => s.addToTodayPlan)
+  const reorderTodayItems = useStore(s => s.reorderTodayItems)
 
   const [activeProject, setActiveProject] = useState<Project | null>(null)
   const [activeOrphanTask, setActiveOrphanTask] = useState<Task | null>(null)
+  const [activePlanItem, setActivePlanItem] = useState<PlanItem | null>(null)
   const [dragPreview, setDragPreview] = useState<{
     activeId: string
     targetCol: ProjectStatus
@@ -110,6 +118,8 @@ export function KanbanBoard({
     [projects, selectedContextId]
   )
 
+  const orderedTodayItems = dailyPlan ? (dailyPlan.itemOrder ?? deriveItemOrder(dailyPlan)) : []
+
   const getProjectsByStatus = useCallback(
     (status: ProjectStatus) => visibleProjects.filter(p => p.status === status),
     [visibleProjects]
@@ -135,6 +145,12 @@ export function KanbanBoard({
     const id = event.active.id as string
     const h = event.active.rect.current.initial?.height ?? 80
     setDragHeight(h)
+    if (id.startsWith('plan-')) {
+      const planId = id.slice('plan-'.length)
+      const item = orderedTodayItems.find(i => i.id === planId)
+      if (item) setActivePlanItem(item)
+      return
+    }
     const orphan = orphanTasks.find(t => t.id === id)
     if (orphan) {
       setActiveOrphanTask(orphan)
@@ -150,6 +166,12 @@ export function KanbanBoard({
     const activeId = active.id as string
     const overId = over.id as string
     if (activeId === overId) return
+
+    if (activeId.startsWith('plan-') || overId.startsWith('today-')) {
+      setDragPreview(null)
+      setBacklogDragPreview(null)
+      return
+    }
 
     // Backlog section handling — show ghost inside the correct section
     if (overId === 'backlog-soon' || overId === 'backlog-not_yet' || overId === 'backlog-someday' || overId === 'backlog') {
@@ -210,10 +232,12 @@ export function KanbanBoard({
 
   function handleDragEnd(event: DragEndEvent) {
     const wasOrphan = !!activeOrphanTask
+    const wasPlanItem = !!activePlanItem
     setDragPreview(null)
     setBacklogDragPreview(null)
     setActiveProject(null)
     setActiveOrphanTask(null)
+    setActivePlanItem(null)
 
     const { active, over } = event
     if (!over) return
@@ -221,6 +245,27 @@ export function KanbanBoard({
     const activeId = active.id as string
     const overId = over.id as string
     if (activeId === overId) return
+
+    // --- Reorder within Today ---
+    if (wasPlanItem) {
+      if (!overId.startsWith('plan-')) return
+      const oldIndex = orderedTodayItems.findIndex(i => `plan-${i.id}` === activeId)
+      const newIndex = orderedTodayItems.findIndex(i => `plan-${i.id}` === overId)
+      if (oldIndex === -1 || newIndex === -1) return
+      reorderTodayItems(arrayMove(orderedTodayItems, oldIndex, newIndex))
+      return
+    }
+
+    // --- Drop a project/orphan task into a Today tier zone ---
+    const todayTier = overId === 'today-deep' ? 'deep' : overId === 'today-short' ? 'short' : overId === 'today-maintenance' ? 'maintenance' : null
+    if (todayTier) {
+      if (wasOrphan) {
+        if (todayTier !== 'deep') addToTodayPlan(activeId, 'task', todayTier)
+      } else {
+        addToTodayPlan(activeId, 'project', todayTier)
+      }
+      return
+    }
 
     // --- Orphan task drag ---
     if (wasOrphan) {
@@ -382,6 +427,7 @@ export function KanbanBoard({
           {[
             { id: 'backlog', label: 'Backlog' },
             { id: 'in_progress', label: 'Active' },
+            { id: 'today', label: 'Today' },
             { id: 'waiting', label: 'Waiting' },
             { id: 'done', label: 'Done' },
           ].map(tab => (
@@ -406,8 +452,8 @@ export function KanbanBoard({
           onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
         >
-          <div className="sm:grid sm:grid-cols-4 sm:gap-4 flex flex-col gap-3">
-            <div className={mobileCol !== 'backlog' ? 'hidden sm:block' : ''}>
+          <div className="sm:flex sm:flex-row sm:gap-4 sm:overflow-x-auto sm:pb-2 flex flex-col gap-3">
+            <div className={`${mobileCol !== 'backlog' ? 'hidden sm:block' : ''} sm:w-[300px] sm:flex-shrink-0`}>
               <BacklogColumn
                 projects={getProjectsByStatus('backlog')}
                 orphanTasks={getOrphansByColumn('backlog')}
@@ -416,21 +462,20 @@ export function KanbanBoard({
                 {...orphanHandlers}
               />
             </div>
-            {KANBAN_COLUMNS.filter(col => col.id !== 'backlog').map(col => {
-              const isWipColumn = col.id === 'in_progress' || col.id === 'waiting'
+            {(() => {
+              const inProgressCol = KANBAN_COLUMNS.find(c => c.id === 'in_progress')!
               return (
-                <div key={col.id} className={mobileCol !== col.id ? 'hidden sm:block' : ''}>
+                <div className={`${mobileCol !== 'in_progress' ? 'hidden sm:block' : ''} sm:w-[300px] sm:flex-shrink-0`}>
                   <KanbanColumn
-                    id={col.id}
-                    title={col.title}
-                    limit={isWipColumn ? inProgressLimit : null}
-                    combinedCount={isWipColumn ? getWipCount() : undefined}
-                    projects={getProjectsByStatus(col.id)}
-                    orphanTasks={getOrphansByColumn(col.id)}
-                    crossListedProjects={col.id === 'waiting' ? crossListedInWaiting : undefined}
+                    id={inProgressCol.id}
+                    title={inProgressCol.title}
+                    limit={inProgressLimit}
+                    combinedCount={getWipCount()}
+                    projects={getProjectsByStatus('in_progress')}
+                    orphanTasks={getOrphansByColumn('in_progress')}
                     onProjectClick={handleProjectClick}
                     dragPreview={
-                      dragPreview?.targetCol === col.id
+                      dragPreview?.targetCol === 'in_progress'
                         ? { activeId: dragPreview.activeId, afterItemId: dragPreview.afterItemId, height: dragPreview.height, beforeFirst: dragPreview.beforeFirst }
                         : undefined
                     }
@@ -438,8 +483,34 @@ export function KanbanBoard({
                   />
                 </div>
               )
-            })}
-            <div className={mobileCol !== 'done' ? 'hidden sm:block' : ''}>
+            })()}
+            <div className={`${mobileCol !== 'today' ? 'hidden sm:block' : ''} sm:w-[300px] sm:flex-shrink-0`}>
+              <TodayColumn onOpenMeetings={onOpenMeetings ?? (() => {})} />
+            </div>
+            {(() => {
+              const waitingCol = KANBAN_COLUMNS.find(c => c.id === 'waiting')!
+              return (
+                <div className={`${mobileCol !== 'waiting' ? 'hidden sm:block' : ''} sm:w-[300px] sm:flex-shrink-0`}>
+                  <KanbanColumn
+                    id={waitingCol.id}
+                    title={waitingCol.title}
+                    limit={inProgressLimit}
+                    combinedCount={getWipCount()}
+                    projects={getProjectsByStatus('waiting')}
+                    orphanTasks={getOrphansByColumn('waiting')}
+                    crossListedProjects={crossListedInWaiting}
+                    onProjectClick={handleProjectClick}
+                    dragPreview={
+                      dragPreview?.targetCol === 'waiting'
+                        ? { activeId: dragPreview.activeId, afterItemId: dragPreview.afterItemId, height: dragPreview.height, beforeFirst: dragPreview.beforeFirst }
+                        : undefined
+                    }
+                    {...orphanHandlers}
+                  />
+                </div>
+              )
+            })()}
+            <div className={`${mobileCol !== 'done' ? 'hidden sm:block' : ''} sm:w-[300px] sm:flex-shrink-0`}>
               <DoneListColumn />
             </div>
           </div>

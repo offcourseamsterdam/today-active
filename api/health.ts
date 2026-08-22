@@ -5,6 +5,8 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
     ok: true,
     hasOpenAiKey: !!process.env.OPENAI_API_KEY,
     keyPrefix: process.env.OPENAI_API_KEY?.slice(0, 7) ?? null,
+    hasAnthropicKey: !!process.env.ANTHROPIC_API_KEY,
+    anthropicKeyPrefix: process.env.ANTHROPIC_API_KEY?.slice(0, 7) ?? null,
     nodeVersion: process.version,
     timestamp: new Date().toISOString(),
   })

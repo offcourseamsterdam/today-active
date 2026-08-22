@@ -102,6 +102,11 @@ Rules:
       tool_choice: { type: 'tool', name: 'submit_smart_review' },
     })
 
+    if (message.stop_reason === 'max_tokens') {
+      res.status(500).json({ error: 'Response truncated — please try again' })
+      return
+    }
+
     const toolUse = message.content.find(block => block.type === 'tool_use')
     if (!toolUse || toolUse.type !== 'tool_use') {
       res.status(500).json({ error: 'No response from model' })

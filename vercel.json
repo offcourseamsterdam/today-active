@@ -29,6 +29,10 @@
     "api/goal-review.ts": {
       "maxDuration": 30,
       "memory": 512
+    },
+    "api/make-actionable.ts": {
+      "maxDuration": 30,
+      "memory": 512
     }
   }
 }

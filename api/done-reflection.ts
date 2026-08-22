@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import OpenAI from 'openai'
+import Anthropic from '@anthropic-ai/sdk'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -7,9 +7,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
-  const apiKey = process.env.OPENAI_API_KEY
+  const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
-    res.status(500).json({ error: 'OPENAI_API_KEY not configured' })
+    res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' })
     return
   }
 
@@ -50,14 +50,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       userLines.push(`Days they showed up and worked this week: ${totalDaysWorkedThisWeek}`)
     }
 
-    const openai = new OpenAI({ apiKey })
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      response_format: { type: 'json_object' },
-      messages: [
-        {
-          role: 'system',
-          content: `You are Oliver Burkeman — the author of Four Thousand Weeks, The Imperfectionist, Meditations for Mortals, and The Antidote. You're reflecting on someone's completed work for the day or week.
+    const anthropic = new Anthropic({ apiKey })
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-5',
+      max_tokens: 1024,
+      system: `You are Oliver Burkeman — the author of Four Thousand Weeks, The Imperfectionist, Meditations for Mortals, and The Antidote. You're reflecting on someone's completed work for the day or week.
 
 Your core beliefs that shape every response:
 - The done list is infinitely more important than the to-do list. What someone finished IS their life — not preparation for some future moment when they'll finally be "on top of things."
@@ -75,26 +72,35 @@ Your tone:
 - Brief — 3-5 sentences maximum. You trust the reader to connect the dots.
 - British-inflected but natural. Dry wit is welcome. Never forced.
 - End with a reframe, not a compliment. Not "great job!" but a shift in perspective: "This is what it actually looks like to take your finitude seriously." or "That's three fewer things standing between you and a Tuesday evening you can actually enjoy."
-- Never use exclamation marks more than once. Never say "amazing", "incredible", "awesome", or "crushing it."
-
-Return a JSON object:
-- "reflection": string (3-5 sentences, the main body of your reflection — warm, specific, Burkeman-voiced)
-- "headline": string (one short sentence, a punchy reframe that captures the essence — like a column headline Oliver would write)`,
-        },
+- Never use exclamation marks more than once. Never say "amazing", "incredible", "awesome", or "crushing it."`,
+      messages: [
         {
           role: 'user',
           content: userLines.join('\n'),
         },
       ],
+      tools: [{
+        name: 'submit_reflection',
+        description: 'Submit the reflection result',
+        input_schema: {
+          type: 'object',
+          properties: {
+            reflection: { type: 'string', description: '3-5 sentences, the main body of your reflection — warm, specific, Burkeman-voiced' },
+            headline: { type: 'string', description: 'one short sentence, a punchy reframe that captures the essence — like a column headline Oliver would write' },
+          },
+          required: ['reflection', 'headline'],
+        },
+      }],
+      tool_choice: { type: 'tool', name: 'submit_reflection' },
     })
 
-    const content = completion.choices[0]?.message?.content
-    if (!content) {
+    const toolUse = message.content.find(block => block.type === 'tool_use')
+    if (!toolUse || toolUse.type !== 'tool_use') {
       res.status(500).json({ error: 'No response from model' })
       return
     }
 
-    const parsed = JSON.parse(content)
+    const parsed = toolUse.input as { reflection?: string; headline?: string }
     res.status(200).json({
       reflection: parsed.reflection ?? '',
       headline: parsed.headline ?? '',

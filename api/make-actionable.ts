@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import OpenAI from 'openai'
+import Anthropic from '@anthropic-ai/sdk'
 
 interface TaskInput {
   id: string
@@ -69,9 +69,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
-  const apiKey = process.env.OPENAI_API_KEY
+  const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
-    res.status(503).json({ error: 'OPENAI_API_KEY not configured' })
+    res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured' })
     return
   }
 
@@ -145,55 +145,81 @@ Regels:
 - Vermijd vage werkwoorden zoals "regelen", "uitzoeken", "kijken naar". Vervang door specifieke acties: "mailen", "bellen", "openen in", "kopiëren naar".
 - Concept-berichten (draftMessage) zijn kort, vriendelijk, klaar om te plakken. Alleen toevoegen als de taak menselijke communicatie vereist.
 - Reasoning is optioneel maar kort (max 1 zin).
+- taskId moet exact overeenkomen met een id uit de takenlijst.
+- type moet exact "concrete", "subtasks" of "alternatives" zijn.
 ${fewShot ? `
 
 Voorbeelden van eerder werk van deze gebruiker (gebruik als toon-/stijl-referentie):
-${fewShot}` : ''}
-
-Antwoord ALTIJD in geldige JSON volgens dit schema:
-{
-  "results": [
-    {
-      "taskId": "<id>",
-      "type": "concrete" | "subtasks" | "alternatives",
-      // concrete:
-      "newTitle"?: "string",
-      "channel"?: "string",
-      "draftMessage"?: "string",
-      // subtasks:
-      "newTitle"?: "string (optional rewrite of parent task)",
-      "subtasks"?: [{ "title": "string" }],
-      // alternatives:
-      "alternatives"?: [{ "title": "string", "channel"?: "string", "draftMessage"?: "string" }],
-      // optional for all:
-      "reasoning"?: "string"
-    }
-  ]
-}`
+${fewShot}` : ''}`
 
     const userMessage = `${projectContext}
 
 Taken om te transformeren:
 ${taskList}`
 
-    const openai = new OpenAI({ apiKey })
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      response_format: { type: 'json_object' },
-      temperature: 0.3,
+    const anthropic = new Anthropic({ apiKey })
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-5',
+      max_tokens: 4096,
+      system: systemPrompt,
       messages: [
-        { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage },
       ],
+      tools: [{
+        name: 'submit_actionable_results',
+        description: 'Submit the transformed, actionable version of each task',
+        input_schema: {
+          type: 'object',
+          properties: {
+            results: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  taskId: { type: 'string' },
+                  type: { type: 'string', enum: ['concrete', 'subtasks', 'alternatives'] },
+                  newTitle: { type: 'string' },
+                  channel: { type: 'string' },
+                  draftMessage: { type: 'string' },
+                  subtasks: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: { title: { type: 'string' } },
+                      required: ['title'],
+                    },
+                  },
+                  alternatives: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        title: { type: 'string' },
+                        channel: { type: 'string' },
+                        draftMessage: { type: 'string' },
+                      },
+                      required: ['title'],
+                    },
+                  },
+                  reasoning: { type: 'string' },
+                },
+                required: ['taskId', 'type'],
+              },
+            },
+          },
+          required: ['results'],
+        },
+      }],
+      tool_choice: { type: 'tool', name: 'submit_actionable_results' },
     })
 
-    const content = completion.choices[0]?.message?.content
-    if (!content) {
+    const toolUse = message.content.find(block => block.type === 'tool_use')
+    if (!toolUse || toolUse.type !== 'tool_use') {
       res.status(500).json({ error: 'No response from model' })
       return
     }
 
-    const parsed = JSON.parse(content) as { results?: Result[] }
+    const parsed = toolUse.input as { results?: Result[] }
     const results = Array.isArray(parsed.results) ? parsed.results : []
 
     res.status(200).json({ results })

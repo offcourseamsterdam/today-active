@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+// Stays on OpenAI (Whisper) — Anthropic has no audio transcription API.
 import OpenAI, { toFile } from 'openai'
 
 // Read raw body from request stream (Vercel doesn't auto-parse binary content types)

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import OpenAI from 'openai'
+import Anthropic from '@anthropic-ai/sdk'
 
 function checkOrDefault(v: unknown): { pass: boolean; note: string } {
   if (v && typeof v === 'object' && typeof (v as { pass?: unknown }).pass === 'boolean') {
@@ -8,15 +8,24 @@ function checkOrDefault(v: unknown): { pass: boolean; note: string } {
   return { pass: false, note: '' }
 }
 
+const SMART_CHECK_SCHEMA = {
+  type: 'object' as const,
+  properties: {
+    pass: { type: 'boolean' as const },
+    note: { type: 'string' as const },
+  },
+  required: ['pass', 'note'],
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
     return
   }
 
-  const apiKey = process.env.OPENAI_API_KEY
+  const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
-    res.status(500).json({ error: 'OPENAI_API_KEY not configured' })
+    res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' })
     return
   }
 
@@ -51,14 +60,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       `User's personal rules: ${personalRules.length > 0 ? personalRules.join('; ') : '(none)'}`,
     ]
 
-    const openai = new OpenAI({ apiKey })
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      response_format: { type: 'json_object' },
-      messages: [
-        {
-          role: 'system',
-          content: `You are a sharp, direct business strategy reviewer. You evaluate a single goal against the SMART framework (Specific, Measurable, Achievable, Relevant, Time-bound).
+    const anthropic = new Anthropic({ apiKey })
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-5',
+      max_tokens: 1024,
+      system: `You are a sharp, direct business strategy reviewer. You evaluate a single goal against the SMART framework (Specific, Measurable, Achievable, Relevant, Time-bound).
 
 You have no knowledge of this person's business beyond what's given to you. For "Relevant," judge whether the goal's own description explains what business outcome it drives — if it doesn't, say so plainly and ask for it, rather than assuming relevance or fabricating a business rationale you don't have.
 
@@ -71,25 +77,38 @@ Rules:
 - Achievable: given the target date and (if set) target days worked, is the pace realistic? Flag if the timeline looks too tight or suspiciously loose.
 - Relevant: does the description explain the business impact? Does it overlap or conflict with the other active goals listed?
 - Time-bound: it will always have a target date by construction — flag only if the date seems arbitrary or the description never references the deadline.
-- Be brief. No preamble, no encouragement, no exclamation marks.
-
-Return a JSON object with exactly these keys, each an object with "pass" (boolean) and "note" (string):
-"specific", "measurable", "achievable", "relevant", "timeBound"`,
-        },
+- Be brief. No preamble, no encouragement, no exclamation marks.`,
+      messages: [
         {
           role: 'user',
           content: lines.join('\n'),
         },
       ],
+      tools: [{
+        name: 'submit_smart_review',
+        description: 'Submit the SMART review result for this goal',
+        input_schema: {
+          type: 'object',
+          properties: {
+            specific: SMART_CHECK_SCHEMA,
+            measurable: SMART_CHECK_SCHEMA,
+            achievable: SMART_CHECK_SCHEMA,
+            relevant: SMART_CHECK_SCHEMA,
+            timeBound: SMART_CHECK_SCHEMA,
+          },
+          required: ['specific', 'measurable', 'achievable', 'relevant', 'timeBound'],
+        },
+      }],
+      tool_choice: { type: 'tool', name: 'submit_smart_review' },
     })
 
-    const content = completion.choices[0]?.message?.content
-    if (!content) {
+    const toolUse = message.content.find(block => block.type === 'tool_use')
+    if (!toolUse || toolUse.type !== 'tool_use') {
       res.status(500).json({ error: 'No response from model' })
       return
     }
 
-    const parsed = JSON.parse(content)
+    const parsed = toolUse.input as Record<string, unknown>
     res.status(200).json({
       specific: checkOrDefault(parsed.specific),
       measurable: checkOrDefault(parsed.measurable),

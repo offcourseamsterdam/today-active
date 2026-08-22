@@ -1,6 +1,6 @@
 # Vandaag — daily planning app
 
-Personal productivity / "today" planner in Dutch. Vite + React 19 + TS, Mantine UI + Tailwind v4, Zustand store, Firebase (auth + Firestore), OpenAI-backed Vercel serverless functions.
+Personal productivity / "today" planner in Dutch. Vite + React 19 + TS, Mantine UI + Tailwind v4, Zustand store, Firebase (auth + Firestore), Vercel serverless functions backed by Anthropic (Claude) — except `api/transcribe.ts`, which stays on OpenAI Whisper for audio transcription (no Claude equivalent exists).
 
 ## Commands
 
@@ -11,7 +11,7 @@ npm run lint     # eslint .
 npm run preview  # serve the dist/ build locally
 ```
 
-`npm run dev` proxies `/api/*` to the real `api/*.ts` Vercel handlers via `devApiPlugin` in `vite.config.ts`. The plugin loads **all** env vars from `.env` (not just `VITE_*`) so handlers can read `OPENAI_API_KEY`.
+`npm run dev` proxies `/api/*` to the real `api/*.ts` Vercel handlers via `devApiPlugin` in `vite.config.ts`. The plugin loads **all** env vars from `.env`/`.env.local` (not just `VITE_*`) so handlers can read `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`.
 
 ## Architecture
 
@@ -21,7 +21,7 @@ npm run preview  # serve the dist/ build locally
 - `src/store/` — Zustand store, one slice per feature (`tasksSlice.ts`, `projectsSlice.ts`, `meetingsSlice.ts`, …). Aggregated in `store/index.ts`.
 - `src/lib/` — pure utilities (`firebase.ts`, `firestore.ts`, audio, calendar, recurrence, share, etc.).
 - `src/hooks/` — `useAuth`, `useFirestoreSync`, etc.
-- `api/` — Vercel serverless functions: `transcribe.ts`, `meeting-notes.ts`, `done-reflection.ts`, `project-decisions.ts`, `recent-meeting-summary.ts`, `health.ts`.
+- `api/` — Vercel serverless functions: `transcribe.ts` (OpenAI Whisper), `meeting-notes.ts`, `done-reflection.ts`, `project-decisions.ts`, `recent-meeting-summary.ts`, `make-actionable.ts`, `goal-review.ts` (all Anthropic/Claude, via forced tool-use for structured JSON output), `health.ts`.
 
 ## Deploy / hosting
 
@@ -33,9 +33,9 @@ npm run preview  # serve the dist/ build locally
 
 ## Environment variables
 
-Local `.env` must include: `VITE_FIREBASE_*` (six keys) and `OPENAI_API_KEY`.
+Local `.env`/`.env.local` must include: `VITE_FIREBASE_*` (six keys), `ANTHROPIC_API_KEY` (all AI endpoints except transcription), and `OPENAI_API_KEY` (`api/transcribe.ts` only, Whisper).
 
-On Vercel (Production env): same set required. The `VITE_FIREBASE_*` keys are set; `OPENAI_API_KEY` is currently **missing in production** (verifiable via `https://vandaag-app-three.vercel.app/api/health`). All `/api/*` AI features fail in prod until that's added.
+On Vercel (Production env): same set required. The `VITE_FIREBASE_*` keys are set; `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` are currently **missing in production** (verifiable via `https://vandaag-app-three.vercel.app/api/health`). All `/api/*` AI features fail in prod until those are added.
 
 ## Routing
 

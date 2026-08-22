@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import OpenAI from 'openai'
+import Anthropic from '@anthropic-ai/sdk'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -7,9 +7,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
-  const apiKey = process.env.OPENAI_API_KEY
+  const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
-    res.status(500).json({ error: 'OPENAI_API_KEY not configured' })
+    res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' })
     return
   }
 
@@ -40,14 +40,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const userMessage = `Project: ${projectTitle}\n\n${meetingLines.join('\n\n')}`
 
-    const openai = new OpenAI({ apiKey })
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      response_format: { type: 'json_object' },
-      messages: [
-        {
-          role: 'system',
-          content: `You are a concise meeting analyst. Given decisions and action items from multiple meetings for a project, produce a consolidated summary.
+    const anthropic = new Anthropic({ apiKey })
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-5',
+      max_tokens: 2048,
+      system: `You are a concise meeting analyst. Given decisions and action items from multiple meetings for a project, produce a consolidated summary.
 
 For each decision:
 - Extract what was decided (one clear sentence)
@@ -62,26 +59,51 @@ Rules:
 - If a decision from an earlier meeting was revised in a later meeting, show the latest version
 - Keep decision text concise (one sentence)
 - Themes should be 1-2 words (e.g., "Infrastructure", "Hiring", "Product")
-- If no clear themes, return an empty themes array
-
-Return a JSON object:
-- "decisions": array of { "decision": string, "responsible": string | null, "date": string, "meetingTitle": string }
-- "themes": string[] (short theme labels, max 5)`,
-        },
+- If no clear themes, return an empty themes array`,
+      messages: [
         {
           role: 'user',
           content: userMessage,
         },
       ],
+      tools: [{
+        name: 'submit_decisions',
+        description: 'Submit the consolidated decisions summary',
+        input_schema: {
+          type: 'object',
+          properties: {
+            decisions: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  decision: { type: 'string' },
+                  responsible: { type: ['string', 'null'] },
+                  date: { type: 'string' },
+                  meetingTitle: { type: 'string' },
+                },
+                required: ['decision', 'responsible', 'date', 'meetingTitle'],
+              },
+            },
+            themes: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'short theme labels, max 5',
+            },
+          },
+          required: ['decisions', 'themes'],
+        },
+      }],
+      tool_choice: { type: 'tool', name: 'submit_decisions' },
     })
 
-    const content = completion.choices[0]?.message?.content
-    if (!content) {
+    const toolUse = message.content.find(block => block.type === 'tool_use')
+    if (!toolUse || toolUse.type !== 'tool_use') {
       res.status(500).json({ error: 'No response from model' })
       return
     }
 
-    const parsed = JSON.parse(content)
+    const parsed = toolUse.input as { decisions?: unknown; themes?: unknown }
     res.status(200).json({
       decisions: parsed.decisions ?? [],
       themes: parsed.themes ?? [],

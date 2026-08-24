@@ -32,7 +32,7 @@ function BacklogSection({ sectionId, title, projects, onProjectClick, dragPrevie
       className={`min-h-[60px] rounded-[6px] transition-colors duration-150 -mx-1 px-1 py-1
         ${isOver ? 'bg-border-light' : ''}`}
     >
-      <div className="text-[11px] uppercase tracking-[0.06em] text-stone/70 font-semibold mb-2 px-1">
+      <div className="text-[12px] uppercase tracking-[0.06em] text-charcoal/65 font-semibold mb-2 px-1">
         {title}
       </div>
       <SortableContext items={projects.map(p => p.id)} strategy={verticalListSortingStrategy}>

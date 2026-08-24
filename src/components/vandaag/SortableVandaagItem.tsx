@@ -118,16 +118,32 @@ export function SortableVandaagItem({
               onClick={() => setOpenProjectId(project.id)}
               className="flex-1 min-w-0 text-left"
             >
-              <span className={`block break-words ${isDeep ? 'text-[14px] font-medium' : 'text-[13px]'}
-                ${isItemCompleted
-                  ? dark ? 'text-citadel-text/25 line-through' : 'text-stone/40 line-through'
-                  : dark ? 'text-citadel-text' : 'text-charcoal'}`}>
-                {project.title}
-              </span>
-              {nextAction && !isItemCompleted && (
-                <span className={`block text-[11px] truncate mt-0.5 ${dark ? 'text-citadel-text/35' : 'text-stone/50'}`}>
-                  → {nextAction.title}
+              {isItemCompleted ? (
+                <span className={`block break-words ${isDeep ? 'text-[14px] font-medium' : 'text-[13px]'}
+                  ${dark ? 'text-citadel-text/25 line-through' : 'text-stone/40 line-through'}`}>
+                  {project.title}
                 </span>
+              ) : nextAction ? (
+                <>
+                  {/* Next action is the actual thing to do — lead with it */}
+                  <span className={`block break-words ${isDeep ? 'text-[14px] font-medium' : 'text-[13px] font-medium'}
+                    ${dark ? 'text-citadel-text' : 'text-charcoal'}`}>
+                    {nextAction.title}
+                  </span>
+                  <span className={`block text-[11px] truncate mt-0.5 ${dark ? 'text-citadel-text/40' : 'text-stone/55'}`}>
+                    {project.title}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className={`block break-words ${isDeep ? 'text-[14px] font-medium' : 'text-[13px]'}
+                    ${dark ? 'text-citadel-text' : 'text-charcoal'}`}>
+                    {project.title}
+                  </span>
+                  <span className={`block text-[11px] italic mt-0.5 ${dark ? 'text-citadel-text/30' : 'text-stone/40'}`}>
+                    Plan next task
+                  </span>
+                </>
               )}
             </button>
           </div>

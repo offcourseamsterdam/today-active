@@ -51,15 +51,15 @@ export function useReviewKeyboard(config: UseReviewKeyboardConfig) {
         }
       }
 
-      // Projects shortcuts
+      // Projects shortcuts — 'j'/'k' only (not ArrowDown/ArrowUp, which must stay
+      // free for native page scrolling; focusedProjectIndex has no visible
+      // indicator, so hijacking arrow keys made scrolling feel silently stuck).
       if (config.activeSection === 'projects' && config.projectCount > 0) {
         switch (e.key) {
-          case 'ArrowDown':
           case 'j':
             e.preventDefault()
             config.setFocusedProjectIndex(i => Math.min(i + 1, config.projectCount - 1))
             return
-          case 'ArrowUp':
           case 'k':
             e.preventDefault()
             config.setFocusedProjectIndex(i => Math.max(i - 1, 0))

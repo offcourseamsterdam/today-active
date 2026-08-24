@@ -197,12 +197,15 @@ export default function ProjectReviewCard({
   onProjectMoved,
 }: ProjectReviewCardProps) {
   const [newTask, setNewTask] = useState('')
+  const [hideDone, setHideDone] = useState(false)
   const updateProject = useStore(s => s.updateProject)
   const moveProject = useStore(s => s.moveProject)
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
   const openTasks = project.tasks.filter(t => t.status !== 'done' && t.status !== 'dropped')
+  const doneTaskCount = project.tasks.filter(t => t.status === 'done').length
+  const visibleTasks = hideDone ? project.tasks.filter(t => t.status !== 'done') : project.tasks
   const hasWaiting = (project.waitingOn?.length ?? 0) > 0
 
   const lastActivity = project.daysWorkedLog.length > 0
@@ -316,12 +319,22 @@ export default function ProjectReviewCard({
             {/* Sortable tasks */}
             {project.tasks.length > 0 && (
               <div>
-                <h4 className="text-[11px] font-medium uppercase tracking-wide text-stone mb-2">
-                  Taken
-                </h4>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-[11px] font-medium uppercase tracking-wide text-stone">
+                    Taken
+                  </h4>
+                  {doneTaskCount > 0 && (
+                    <button
+                      onClick={() => setHideDone(v => !v)}
+                      className="text-[11px] text-stone/50 hover:text-stone transition-colors"
+                    >
+                      {hideDone ? `Toon voltooid (${doneTaskCount})` : 'Verberg voltooid'}
+                    </button>
+                  )}
+                </div>
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                  <SortableContext items={project.tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
-                    {project.tasks.map(task => (
+                  <SortableContext items={visibleTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
+                    {visibleTasks.map(task => (
                       <SortableTaskRow
                         key={task.id}
                         task={task}

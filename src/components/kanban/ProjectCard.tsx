@@ -63,7 +63,7 @@ export const ProjectCard = memo(function ProjectCard({ project, onClick, isDragO
     <div
       {...wrapperProps}
       onClick={onClick}
-      className={`group rounded-[8px] mb-3 cursor-grab overflow-hidden
+      className={`group rounded-[8px] mb-3 cursor-grab select-none overflow-hidden
         border transition-all duration-150
         ${isDragging
           ? 'opacity-0 pointer-events-none'

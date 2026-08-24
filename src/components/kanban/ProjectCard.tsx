@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { Sun } from 'lucide-react'
 import { CategoryBadge } from '../ui/CategoryBadge'
 import { WaitingEntryRow } from '../ui/WaitingEntryRow'
 import { CardMenu } from './CardMenu'
@@ -35,6 +36,8 @@ export const ProjectCard = memo(function ProjectCard({ project, onClick, isDragO
   const contexts = useStore(s => s.settings.contexts ?? EMPTY_CONTEXTS)
   const isLoadingArtwork = useStore(s => s.artworkLoadingIds.includes(project.id))
   const activeContexts = contexts.filter(c => project.contextIds?.includes(c.id))
+  const addToTodayPlan = useStore(s => s.addToTodayPlan)
+  const isInToday = useStore(s => (s.dailyPlan?.itemOrder ?? []).some(i => i.id === project.id))
 
   const totalTasks = project.tasks.length
   const doneTasks = project.tasks.filter(t => t.status === 'done').length
@@ -130,7 +133,21 @@ export const ProjectCard = memo(function ProjectCard({ project, onClick, isDragO
       <div className="px-4 py-3.5">
         <div className="flex items-start justify-between gap-2 mb-1">
           <div className="text-[14px] font-medium text-charcoal leading-snug">{project.title}</div>
-          {!isDragOverlay && <CardMenu id={project.id} type="project" />}
+          {!isDragOverlay && (
+            <div className="flex items-center gap-0.5 shrink-0">
+              {!isDone && !isInToday && (
+                <button
+                  onPointerDown={e => e.stopPropagation()}
+                  onClick={e => { e.stopPropagation(); addToTodayPlan(project.id, 'project', 'maintenance') }}
+                  title="Voeg toe aan Today"
+                  className="opacity-0 group-hover:opacity-50 hover:!opacity-100 text-stone transition-all"
+                >
+                  <Sun size={14} />
+                </button>
+              )}
+              <CardMenu id={project.id} type="project" />
+            </div>
+          )}
         </div>
 
         {/* Context labels */}

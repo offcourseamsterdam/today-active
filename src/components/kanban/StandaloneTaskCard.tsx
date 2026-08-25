@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, memo } from 'react'
-import { FolderOpen } from 'lucide-react'
+import { FolderOpen, Sun } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { Task, Project } from '../../types'
 import { WaitingBadge } from '../ui/WaitingBadge'
-import { CardMenu } from './CardMenu'
+import { useStore } from '../../store'
 
 interface StandaloneTaskCardProps {
   task: Task
@@ -32,6 +32,9 @@ export const StandaloneTaskCard = memo(function StandaloneTaskCard({
   const [nextActionDraft, setNextActionDraft] = useState('')
   const nextActionRef = useRef<HTMLInputElement>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
+
+  const addToTodayPlan = useStore(s => s.addToTodayPlan)
+  const isInToday = useStore(s => (s.dailyPlan?.itemOrder ?? []).some(i => i.id === task.id))
 
   function startEditNextAction() {
     setNextActionDraft(task.nextAction ?? '')
@@ -146,6 +149,18 @@ export const StandaloneTaskCard = memo(function StandaloneTaskCard({
         )}
       </div>
 
+      {/* Add to Today */}
+      {!isInToday && (
+        <button
+          onPointerDown={e => e.stopPropagation()}
+          onClick={e => { e.stopPropagation(); addToTodayPlan(task.id, 'task', 'maintenance') }}
+          title="Voeg toe aan Today"
+          className="opacity-0 group-hover:opacity-50 hover:!opacity-100 text-stone transition-all"
+        >
+          <Sun size={12} />
+        </button>
+      )}
+
       {/* Assign to project */}
       <div ref={pickerRef} className="relative">
         <button
@@ -182,8 +197,6 @@ export const StandaloneTaskCard = memo(function StandaloneTaskCard({
           </div>
         )}
       </div>
-
-      {!isDragOverlay && <CardMenu id={task.id} type="task" />}
 
       <button
         onPointerDown={e => e.stopPropagation()}

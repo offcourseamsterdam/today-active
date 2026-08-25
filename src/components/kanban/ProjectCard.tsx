@@ -1,7 +1,7 @@
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Sun } from 'lucide-react'
+import { Sun, Target, X } from 'lucide-react'
 import { CategoryBadge } from '../ui/CategoryBadge'
 import { WaitingEntryRow } from '../ui/WaitingEntryRow'
 import { CardMenu } from './CardMenu'
@@ -19,6 +19,8 @@ interface ProjectCardProps {
 }
 
 export const ProjectCard = memo(function ProjectCard({ project, onClick, isDragOverlay }: ProjectCardProps) {
+  const [showObjectiveMenu, setShowObjectiveMenu] = useState(false)
+
   const {
     attributes,
     listeners,
@@ -38,6 +40,10 @@ export const ProjectCard = memo(function ProjectCard({ project, onClick, isDragO
   const activeContexts = contexts.filter(c => project.contextIds?.includes(c.id))
   const addToTodayPlan = useStore(s => s.addToTodayPlan)
   const isInToday = useStore(s => (s.dailyPlan?.itemOrder ?? []).some(i => i.id === project.id))
+  const goals = useStore(s => s.goals)
+  const assignProjectToGoal = useStore(s => s.assignProjectToGoal)
+
+  const currentGoal = project.goalId ? goals.find(g => g.id === project.goalId) : null
 
   const totalTasks = project.tasks.length
   const doneTasks = project.tasks.filter(t => t.status === 'done').length
@@ -134,7 +140,7 @@ export const ProjectCard = memo(function ProjectCard({ project, onClick, isDragO
         <div className="flex items-start justify-between gap-2 mb-1">
           <div className="text-[14px] font-medium text-charcoal leading-snug">{project.title}</div>
           {!isDragOverlay && (
-            <div className="flex items-center gap-0.5 shrink-0">
+            <div className="flex items-center gap-0.5 shrink-0 relative">
               {!isDone && !isInToday && (
                 <button
                   onPointerDown={e => e.stopPropagation()}
@@ -145,6 +151,66 @@ export const ProjectCard = memo(function ProjectCard({ project, onClick, isDragO
                   <Sun size={14} />
                 </button>
               )}
+              <div className="relative">
+                <button
+                  onPointerDown={e => e.stopPropagation()}
+                  onClick={e => { e.stopPropagation(); setShowObjectiveMenu(!showObjectiveMenu) }}
+                  title={currentGoal ? `Assigned to: ${currentGoal.title}` : "Assign to objective"}
+                  className={`opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-all ${
+                    currentGoal ? 'text-amber-600 opacity-100 group-hover:opacity-100' : 'text-stone'
+                  }`}
+                >
+                  <Target size={14} />
+                </button>
+
+                {showObjectiveMenu && (
+                  <div className="absolute top-full right-0 mt-1 bg-card border border-border rounded-[6px] shadow-lg z-50 min-w-[200px]">
+                    <div className="py-1">
+                      {currentGoal && (
+                        <>
+                          <button
+                            onPointerDown={e => e.stopPropagation()}
+                            onClick={e => {
+                              e.stopPropagation()
+                              assignProjectToGoal(project.id, null)
+                              setShowObjectiveMenu(false)
+                            }}
+                            className="w-full text-left px-3 py-1.5 text-[12px] text-stone/60 hover:bg-border-light flex items-center gap-2 transition-colors"
+                          >
+                            <X size={12} />
+                            Clear
+                          </button>
+                          <div className="h-px bg-border/30 my-1" />
+                        </>
+                      )}
+                      {goals.length === 0 ? (
+                        <div className="px-3 py-2 text-[12px] text-stone/40 italic">
+                          No objectives yet
+                        </div>
+                      ) : (
+                        goals.map(goal => (
+                          <button
+                            key={goal.id}
+                            onPointerDown={e => e.stopPropagation()}
+                            onClick={e => {
+                              e.stopPropagation()
+                              assignProjectToGoal(project.id, goal.id)
+                              setShowObjectiveMenu(false)
+                            }}
+                            className={`w-full text-left px-3 py-1.5 text-[12px] transition-colors ${
+                              project.goalId === goal.id
+                                ? 'bg-border-light text-charcoal font-medium'
+                                : 'text-stone/70 hover:bg-border-light'
+                            }`}
+                          >
+                            {goal.title}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
               <CardMenu id={project.id} type="project" />
             </div>
           )}
@@ -158,6 +224,17 @@ export const ProjectCard = memo(function ProjectCard({ project, onClick, isDragO
                 {ctx.name}
               </span>
             ))}
+          </div>
+        )}
+
+        {/* Objective badge */}
+        {currentGoal && (
+          <div className="mb-1.5 flex items-center gap-1 text-[10px]">
+            <div
+              className="w-1.5 h-1.5 rounded-full shrink-0"
+              style={{ background: currentGoal.color }}
+            />
+            <span className="text-stone/60">{currentGoal.title}</span>
           </div>
         )}
 

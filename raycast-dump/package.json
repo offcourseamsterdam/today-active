@@ -1,0 +1,53 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "vandaag-dump",
+  "title": "Vandaag Dump",
+  "description": "Dump a distraction or frustration into Vandaag Write Away",
+  "icon": "icon.png",
+  "author": "user",
+  "categories": ["Productivity"],
+  "license": "MIT",
+  "commands": [
+    {
+      "name": "dump",
+      "title": "Dump",
+      "description": "Write away a distraction or frustration",
+      "mode": "view"
+    }
+  ],
+  "preferences": [
+    {
+      "name": "apiUrl",
+      "title": "App URL",
+      "description": "Your Vandaag app URL",
+      "type": "textfield",
+      "required": false,
+      "default": "https://vandaag-app-three.vercel.app",
+      "placeholder": "https://vandaag-app-three.vercel.app"
+    },
+    {
+      "name": "secret",
+      "title": "Write Away Secret",
+      "description": "Your WRITE_AWAY_SECRET from the Write Away tab in Vandaag",
+      "type": "password",
+      "required": true,
+      "placeholder": "Paste your secret key here"
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "^1.79.0",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@raycast/utils": "^1.17.0",
+    "@types/node": "^20.8.10",
+    "typescript": "^5.2.2"
+  },
+  "scripts": {
+    "build": "ray build -e dist",
+    "dev": "ray develop",
+    "fix-lint": "ray lint --fix",
+    "lint": "ray lint",
+    "publish": "npx @raycast/api@latest publish"
+  }
+}

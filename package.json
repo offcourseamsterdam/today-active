@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck": "tsc -b && tsc -p tsconfig.api.json",
+    "test": "vitest run",
+    "test:emulator": "firebase emulators:exec --only firestore --project demo-vandaag \"vitest run --config vitest.config.emulator.ts\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
@@ -45,6 +48,7 @@
     "tailwindcss": "^4.1.18",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.0",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^4.1.12"
   }
 }

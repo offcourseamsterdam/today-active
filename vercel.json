@@ -33,6 +33,12 @@
     "api/make-actionable.ts": {
       "maxDuration": 30,
       "memory": 512
+    },
+    "api/agent.ts": {
+      "maxDuration": 15
+    },
+    "api/mcp.ts": {
+      "maxDuration": 15
     }
   }
 }

@@ -57,6 +57,10 @@ function devApiPlugin(): Plugin {
               res.writeHead(statusCode, { 'Content-Type': 'application/json' })
               res.end(JSON.stringify(data))
             },
+            end() {
+              res.writeHead(statusCode)
+              res.end()
+            },
           }
 
           // Load the right handler
@@ -80,6 +84,10 @@ function devApiPlugin(): Plugin {
             handler = await import('./api/write-away')
           } else if (route === 'goal-review') {
             handler = await import('./api/goal-review')
+          } else if (route === 'agent') {
+            handler = await import('./api/agent')
+          } else if (route === 'mcp') {
+            handler = await import('./api/mcp')
           } else {
             res.writeHead(404)
             res.end('Not found')

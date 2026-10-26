@@ -16,7 +16,7 @@ const CATEGORY_ENUM = ['marketing', 'ops', 'admin', 'finance', 'product', 'perso
 export const MCP_TOOLS: McpToolDef[] = [
   {
     name: 'list_projects',
-    description: 'Lists all projects with their tasks (id, title, status, category, tasks summary).',
+    description: 'Lists all projects with their tasks (id, title, status, category, trackerProjectId if linked, tasks summary).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -50,6 +50,7 @@ export const MCP_TOOLS: McpToolDef[] = [
         taskType: { type: 'string', enum: TASK_TYPE_ENUM },
         nextAction: { type: 'string' },
         kanbanColumn: { type: 'string', enum: PROJECT_STATUS_ENUM },
+        addToToday: { type: 'boolean', description: 'Append to today\'s plan (short tier, or maintenance tier if taskType is "maintenance").' },
         addToTomorrow: { type: 'boolean', description: 'Append to tomorrow\'s plan (short tier, or maintenance tier if taskType is "maintenance").' },
       },
       required: ['title'],
@@ -67,6 +68,8 @@ export const MCP_TOOLS: McpToolDef[] = [
         taskType: { type: 'string', enum: TASK_TYPE_ENUM },
         nextAction: { type: 'string' },
         kanbanColumn: { type: 'string', enum: PROJECT_STATUS_ENUM },
+        addToToday: { type: 'boolean', description: "Add this task to today's plan if it isn't already on it (checks both tiers; no-op if already present)." },
+        addToTomorrow: { type: 'boolean', description: "Add this task to tomorrow's plan if it isn't already on it (checks both tiers; no-op if already present)." },
       },
       required: ['taskId'],
     },
@@ -98,20 +101,44 @@ export const MCP_TOOLS: McpToolDef[] = [
         title: { type: 'string' },
         category: { type: 'string', enum: CATEGORY_ENUM, description: 'Defaults to "personal".' },
         status: { type: 'string', enum: PROJECT_STATUS_ENUM, description: 'Defaults to "backlog".' },
+        trackerProjectId: {
+          type: 'string',
+          description: 'Links this project to an 8-char Off Course Project Tracker project id.',
+        },
       },
       required: ['title'],
     },
   },
   {
     name: 'rename_project',
-    description: "Renames a project (bumps its updatedAt).",
+    description: "Renames a project (bumps its updatedAt) and/or sets its trackerProjectId link.",
     inputSchema: {
       type: 'object',
       properties: {
         projectId: { type: 'string' },
         title: { type: 'string' },
+        trackerProjectId: {
+          type: ['string', 'null'],
+          description: 'Links this project to an 8-char Off Course Project Tracker project id, or null to clear the link.',
+        },
       },
-      required: ['projectId', 'title'],
+      required: ['projectId'],
+    },
+  },
+  {
+    name: 'list_tracker_projects',
+    description:
+      'Read-only: lists projects from the Off Course Project Tracker app (a separate workspace from Vandaag), with assignees resolved to names. Returns `{ workspaceId, projects }` so the caller can see which workspace was read. Returns a "Tracker is not configured" error if TRACKER_WORKSPACE_ID/TRACKER_USER_UID etc. are not set.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        status: {
+          type: ['string', 'array'],
+          items: { type: 'string' },
+          description: 'Filter to one or more tracker statuses (e.g. "in_progress", or ["in_progress", "paused"]).',
+        },
+        includeCompleted: { type: 'boolean', description: 'Include projects with status "completed". Defaults to true.' },
+      },
     },
   },
 ]

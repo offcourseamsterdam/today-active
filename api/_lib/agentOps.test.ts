@@ -195,6 +195,57 @@ describe('addTask', () => {
     expect(patch.tomorrowPlan!.maintenanceTasks).toContain(result.id)
     expect(patch.tomorrowPlan!.shortTasks).not.toContain(result.id)
   })
+
+  it('addToToday creates a fresh today plan and appends the id to shortTasks', () => {
+    const data = baseData()
+    const { patch, result } = addTask(data, { title: 'Plan me', addToToday: true })
+    expect(patch.dailyPlan!.shortTasks).toContain(result.id)
+    expect(patch.dailyPlan!.date).toBe(amsterdamDateString(0))
+  })
+
+  it('addToToday with taskType maintenance appends to maintenanceTasks instead', () => {
+    const data = baseData()
+    const { patch, result } = addTask(data, { title: 'Water plants', taskType: 'maintenance', addToToday: true })
+    expect(patch.dailyPlan!.maintenanceTasks).toContain(result.id)
+    expect(patch.dailyPlan!.shortTasks).not.toContain(result.id)
+  })
+
+  it('addToToday archives a stale dailyPlan into planHistory and rolls over its unfinished tasks', () => {
+    const stalePlan: DailyPlan = {
+      date: '2000-01-01',
+      deepBlock: { projectId: '' },
+      shortTasks: ['old-open'],
+      shortProjects: [],
+      maintenanceTasks: [],
+      maintenanceProjects: [],
+      meetings: [],
+      completedItemIds: ['old-done'],
+      isComplete: false,
+    }
+    const data = baseData({ dailyPlan: stalePlan })
+    const { patch, result } = addTask(data, { title: 'New today task', addToToday: true })
+    expect(patch.dailyPlan!.date).toBe(amsterdamDateString(0))
+    expect(patch.dailyPlan!.shortTasks).toEqual(['old-open', result.id])
+    expect(patch.planHistory!['2000-01-01']).toEqual(stalePlan)
+  })
+
+  it('addToToday promotes a tomorrowPlan dated today, then appends the new task', () => {
+    const tomorrow: DailyPlan = {
+      date: amsterdamDateString(0),
+      deepBlock: { projectId: '' },
+      shortTasks: ['carried'],
+      shortProjects: [],
+      maintenanceTasks: [],
+      maintenanceProjects: [],
+      meetings: [],
+      isComplete: false,
+    }
+    const data = baseData({ tomorrowPlan: tomorrow })
+    const { patch, result } = addTask(data, { title: 'New today task', addToToday: true })
+    expect(patch.dailyPlan!.date).toBe(amsterdamDateString(0))
+    expect(patch.dailyPlan!.shortTasks).toEqual(['carried', result.id])
+    expect(patch.tomorrowPlan).toBeNull()
+  })
 })
 
 describe('updateTask', () => {
@@ -244,6 +295,104 @@ describe('updateTask', () => {
     expect(result.projectId).toBe('p1')
     expect(patch.recurringTasks![0].nextAction).toBe('call them')
   })
+
+  describe('addToToday / addToTomorrow', () => {
+    it('addToToday creates a fresh today plan and appends the task id to shortTasks', () => {
+      const data = baseData({ orphanTasks: [task({ id: 't1', title: 'Orphan' })] })
+      const { patch } = updateTask(data, { taskId: 't1', addToToday: true })
+      expect(patch.dailyPlan!.shortTasks).toContain('t1')
+      expect(patch.dailyPlan!.date).toBe(amsterdamDateString(0))
+    })
+
+    it('addToToday appends to an existing today plan', () => {
+      const existingPlan: DailyPlan = {
+        date: amsterdamDateString(0),
+        deepBlock: { projectId: '' },
+        shortTasks: ['other'],
+        shortProjects: [],
+        maintenanceTasks: [],
+        maintenanceProjects: [],
+        meetings: [],
+        isComplete: false,
+      }
+      const data = baseData({ orphanTasks: [task({ id: 't1', title: 'Orphan' })], dailyPlan: existingPlan })
+      const { patch } = updateTask(data, { taskId: 't1', addToToday: true })
+      expect(patch.dailyPlan!.shortTasks).toEqual(['other', 't1'])
+    })
+
+    it('addToToday puts a maintenance task into the maintenance tier', () => {
+      const data = baseData({ orphanTasks: [task({ id: 't1', title: 'Water plants', taskType: 'maintenance' })] })
+      const { patch } = updateTask(data, { taskId: 't1', addToToday: true })
+      expect(patch.dailyPlan!.maintenanceTasks).toContain('t1')
+      expect(patch.dailyPlan!.shortTasks).not.toContain('t1')
+    })
+
+    it('does not duplicate a task already on today\'s plan (in either tier)', () => {
+      const existingPlan: DailyPlan = {
+        date: amsterdamDateString(0),
+        deepBlock: { projectId: '' },
+        shortTasks: [],
+        shortProjects: [],
+        maintenanceTasks: ['t1'],
+        maintenanceProjects: [],
+        meetings: [],
+        isComplete: false,
+      }
+      const data = baseData({ orphanTasks: [task({ id: 't1', title: 'Orphan' })], dailyPlan: existingPlan })
+      const { patch } = updateTask(data, { taskId: 't1', addToToday: true })
+      expect(patch.dailyPlan).toBeUndefined()
+    })
+
+    it('addToTomorrow appends the task id to tomorrow\'s plan', () => {
+      const data = baseData({ orphanTasks: [task({ id: 't1', title: 'Orphan' })] })
+      const { patch } = updateTask(data, { taskId: 't1', addToTomorrow: true })
+      expect(patch.tomorrowPlan!.shortTasks).toContain('t1')
+      expect(patch.tomorrowPlan!.date).toBe(amsterdamDateString(1))
+    })
+
+    it('throws 404 for an unknown taskId', () => {
+      expect(() => updateTask(baseData(), { taskId: 'missing', addToToday: true })).toThrow(AgentOpError)
+    })
+
+    it('rolls over a stale dailyPlan and does not duplicate a task that survives rollover, but still persists the archive', () => {
+      const stalePlan: DailyPlan = {
+        date: '2000-01-01',
+        deepBlock: { projectId: '' },
+        shortTasks: ['t1'],
+        shortProjects: [],
+        maintenanceTasks: [],
+        maintenanceProjects: [],
+        meetings: [],
+        isComplete: false,
+      }
+      const data = baseData({ dailyPlan: stalePlan, orphanTasks: [task({ id: 't1', title: 'Orphan' })] })
+      const { patch } = updateTask(data, { taskId: 't1', addToToday: true })
+      // t1 is unfinished, so it survives rollover and is already present — not duplicated —
+      // but the stale plan must still be archived into planHistory and the rolled-over
+      // plan persisted, not silently dropped.
+      expect(patch.dailyPlan!.date).toBe(amsterdamDateString(0))
+      expect(patch.dailyPlan!.shortTasks).toEqual(['t1'])
+      expect(patch.planHistory!['2000-01-01']).toEqual(stalePlan)
+    })
+
+    it('promotes a tomorrowPlan dated today via addToToday on update_task, then appends the existing task', () => {
+      const tomorrow: DailyPlan = {
+        date: amsterdamDateString(0),
+        deepBlock: { projectId: '' },
+        shortTasks: ['carried'],
+        shortProjects: [],
+        maintenanceTasks: [],
+        maintenanceProjects: [],
+        meetings: [],
+        isComplete: false,
+      }
+      const data = baseData({ tomorrowPlan: tomorrow, orphanTasks: [task({ id: 't1', title: 'Orphan' })] })
+      const { patch } = updateTask(data, { taskId: 't1', addToToday: true })
+      expect(patch.dailyPlan!.date).toBe(amsterdamDateString(0))
+      expect(patch.dailyPlan!.shortTasks).toEqual(['carried', 't1'])
+      expect(patch.tomorrowPlan).toBeNull()
+    })
+  })
 })
 
 describe('completeTask', () => {
@@ -284,6 +433,16 @@ describe('addProject', () => {
   it('rejects an invalid category', () => {
     expect(() => addProject(baseData(), { title: 'x', category: 'bogus' })).toThrow(AgentOpError)
   })
+
+  it('sets trackerProjectId when given', () => {
+    const { result } = addProject(baseData(), { title: 'x', trackerProjectId: 'abcd1234' })
+    expect(result.trackerProjectId).toBe('abcd1234')
+  })
+
+  it('omits trackerProjectId when not given', () => {
+    const { result } = addProject(baseData(), { title: 'x' })
+    expect(result.trackerProjectId).toBeUndefined()
+  })
 })
 
 describe('renameProject', () => {
@@ -296,6 +455,31 @@ describe('renameProject', () => {
 
   it('throws 404 for an unknown project', () => {
     expect(() => renameProject(baseData(), { projectId: 'missing', title: 'x' })).toThrow(AgentOpError)
+  })
+
+  it('sets trackerProjectId without requiring a title', () => {
+    const data = baseData({ projects: [project({ id: 'p1', title: 'Keep me' })] })
+    const { result } = renameProject(data, { projectId: 'p1', trackerProjectId: 'abcd1234' })
+    expect(result.title).toBe('Keep me')
+    expect(result.trackerProjectId).toBe('abcd1234')
+  })
+
+  it('clears trackerProjectId when given null', () => {
+    const data = baseData({ projects: [project({ id: 'p1', trackerProjectId: 'abcd1234' })] })
+    const { patch, result } = renameProject(data, { projectId: 'p1', trackerProjectId: null })
+    expect(result.trackerProjectId).toBeUndefined()
+    expect(patch.projects![0].trackerProjectId).toBeUndefined()
+  })
+
+  it('clears trackerProjectId when given an empty string', () => {
+    const data = baseData({ projects: [project({ id: 'p1', trackerProjectId: 'abcd1234' })] })
+    const { result } = renameProject(data, { projectId: 'p1', trackerProjectId: '' })
+    expect(result.trackerProjectId).toBeUndefined()
+  })
+
+  it('throws 400 when neither title nor trackerProjectId is given', () => {
+    const data = baseData({ projects: [project({ id: 'p1' })] })
+    expect(() => renameProject(data, { projectId: 'p1' })).toThrow(AgentOpError)
   })
 })
 

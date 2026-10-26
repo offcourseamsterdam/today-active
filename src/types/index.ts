@@ -38,6 +38,7 @@ export interface Project {
   trackProgress: boolean
   missionCritical?: boolean
   goalId?: string          // links this project to one Objective — one goal per project
+  trackerProjectId?: string  // links this project to an 8-char id in the Off Course Project Tracker app
   daysWorked: number
   daysWorkedLog: string[] // Array of date strings (YYYY-MM-DD)
   waitingOn?: WaitingOn[]

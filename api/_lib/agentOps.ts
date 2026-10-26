@@ -18,6 +18,7 @@ import type {
   Settings,
   WriteAwayEntry,
 } from '../../src/types/index.js'
+import { computeDailyPlanRefresh } from '../../src/lib/dailyPlanRollover.js'
 
 // Mirrors src/lib/firestore.ts SyncData. Duplicated (not imported) so this
 // module stays decoupled from the client Firebase SDK that firestore.ts pulls in.
@@ -93,8 +94,10 @@ export function amsterdamDateString(offsetDays = 0): string {
 
 const PROJECT_STATUSES: ProjectStatus[] = ['backlog', 'in_progress', 'waiting', 'done']
 const TASK_TYPES: TaskType[] = ['deep', 'short', 'maintenance', 'reminder']
-// Mirrors the keys of src/types/index.ts's CATEGORY_CONFIG — copied (not imported) so this
-// module never needs a runtime import from src/, only `import type`.
+// Mirrors the keys of src/types/index.ts's CATEGORY_CONFIG — copied (not imported) to avoid
+// a runtime import just for this. (This module does have one runtime src/ import —
+// computeDailyPlanRefresh from src/lib/dailyPlanRollover.js — which is safe to bundle into
+// the Vercel function only because that module stays dependency-free apart from `import type`.)
 const CATEGORIES: Category[] = ['marketing', 'ops', 'admin', 'finance', 'product', 'personal']
 
 // ── param extraction helpers (params arrive as untyped JSON) ──────────────
@@ -203,6 +206,7 @@ export interface AgentProjectSummary {
   title: string
   status: ProjectStatus
   category: Category
+  trackerProjectId?: string
   tasks: AgentTaskSummary[]
 }
 
@@ -241,6 +245,7 @@ function toProjectSummary(p: Project): AgentProjectSummary {
     title: p.title,
     status: p.status,
     category: p.category,
+    ...(p.trackerProjectId ? { trackerProjectId: p.trackerProjectId } : {}),
     tasks: p.tasks.map(toTaskSummary),
   }
 }
@@ -317,9 +322,21 @@ export function listTomorrow(data: SyncData): AgentResolvedPlan | null {
   return resolvePlan(plan, data)
 }
 
-// ── tomorrow-plan helper (mirrors store/helpers.ts ensureTomorrowPlan) ────
+// ── today/tomorrow-plan helper (mirrors store/helpers.ts ensurePlan) ─────
 
-function freshTomorrowPlan(date: string): DailyPlan {
+function ensurePlan(existing: DailyPlan | null, date: string, isToday: boolean): DailyPlan {
+  if (existing && existing.date === date) {
+    return {
+      ...existing,
+      shortProjects: existing.shortProjects ?? [],
+      maintenanceProjects: existing.maintenanceProjects ?? [],
+      meetings: existing.meetings ?? [],
+      shortMeetingIds: existing.shortMeetingIds ?? [],
+      maintenanceMeetingIds: existing.maintenanceMeetingIds ?? [],
+      pinnedItemIds: existing.pinnedItemIds ?? [],
+      ...(isToday ? { blockOrder: existing.blockOrder ?? ['deep', 'short', 'maintenance'] } : {}),
+    }
+  }
   return {
     date,
     deepBlock: { projectId: '' },
@@ -334,21 +351,52 @@ function freshTomorrowPlan(date: string): DailyPlan {
   }
 }
 
+function ensureTodayPlan(data: SyncData): DailyPlan {
+  return ensurePlan(data.dailyPlan, amsterdamDateString(0), true)
+}
+
 function ensureTomorrowPlan(data: SyncData): DailyPlan {
-  const tomorrow = amsterdamDateString(1)
-  const existing = data.tomorrowPlan
-  if (existing && existing.date === tomorrow) {
-    return {
-      ...existing,
-      shortProjects: existing.shortProjects ?? [],
-      maintenanceProjects: existing.maintenanceProjects ?? [],
-      meetings: existing.meetings ?? [],
-      shortMeetingIds: existing.shortMeetingIds ?? [],
-      maintenanceMeetingIds: existing.maintenanceMeetingIds ?? [],
-      pinnedItemIds: existing.pinnedItemIds ?? [],
-    }
+  return ensurePlan(data.tomorrowPlan, amsterdamDateString(1), false)
+}
+
+/**
+ * Today-plan variant for writes that must not silently clobber a stale `dailyPlan`:
+ * mirrors the client's `refreshDailyPlan` (src/lib/dailyPlanRollover.ts, shared) —
+ * promotes a tomorrowPlan dated today (carrying over a stale dailyPlan's unfinished
+ * tasks into it), or archives a stale dailyPlan into planHistory and rolls its
+ * unfinished tasks into a fresh plan for today. Returns the plan to append onto,
+ * plus any planHistory/tomorrowPlan/dailyPlan changes that must be persisted even
+ * if the caller ends up not appending anything (e.g. a no-duplicate skip).
+ */
+function ensureTodayPlanForWrite(data: SyncData): { plan: DailyPlan; patch: Partial<SyncData> } {
+  const today = amsterdamDateString(0)
+  if (data.dailyPlan && data.dailyPlan.date === today) {
+    return { plan: ensureTodayPlan(data), patch: {} }
   }
-  return freshTomorrowPlan(tomorrow)
+
+  const allTasks = [...data.orphanTasks, ...data.recurringTasks]
+  const refreshed = computeDailyPlanRefresh({
+    dailyPlan: data.dailyPlan,
+    tomorrowPlan: data.tomorrowPlan,
+    planHistory: data.planHistory,
+    allTasks,
+    today,
+  })
+  const plan = ensurePlan(refreshed.dailyPlan, today, true)
+  const patch: Partial<SyncData> = refreshed.changed
+    ? { dailyPlan: plan, planHistory: refreshed.planHistory, tomorrowPlan: refreshed.tomorrowPlan }
+    : {}
+  return { plan, patch }
+}
+
+/** Task-id tier ('shortTasks' or 'maintenanceTasks') a task should land in given its taskType. */
+function taskTier(taskType: TaskType | undefined): 'shortTasks' | 'maintenanceTasks' {
+  return taskType === 'maintenance' ? 'maintenanceTasks' : 'shortTasks'
+}
+
+/** True if taskId is already present in either task tier of the plan. */
+function planHasTask(plan: DailyPlan, taskId: string): boolean {
+  return plan.shortTasks.includes(taskId) || plan.maintenanceTasks.includes(taskId)
 }
 
 // ── writes ──────────────────────────────────────────────────────────────
@@ -359,6 +407,7 @@ export function addTask(data: SyncData, params: Params): WriteResult<AgentTaskSu
   const taskType = oneOf(params, 'taskType', TASK_TYPES)
   const nextAction = str(params, 'nextAction')
   const kanbanColumn = oneOf(params, 'kanbanColumn', PROJECT_STATUSES)
+  const addToToday = bool(params, 'addToToday') ?? false
   const addToTomorrow = bool(params, 'addToTomorrow') ?? false
 
   const project = projectId !== undefined ? findProject(data, projectId) : undefined
@@ -389,15 +438,51 @@ export function addTask(data: SyncData, params: Params): WriteResult<AgentTaskSu
     patch.orphanTasks = nextOrphanTasks
   }
 
+  const nextData = { ...data, projects: nextProjects, orphanTasks: nextOrphanTasks }
+
+  if (addToToday) {
+    const { plan, patch: rolloverPatch } = ensureTodayPlanForWrite(nextData)
+    Object.assign(patch, rolloverPatch)
+    const tier = taskTier(taskType)
+    patch.dailyPlan = plan[tier].includes(task.id) ? plan : { ...plan, [tier]: [...plan[tier], task.id] }
+  }
+
   if (addToTomorrow) {
-    const plan = ensureTomorrowPlan({ ...data, projects: nextProjects, orphanTasks: nextOrphanTasks })
-    const tier = taskType === 'maintenance' ? 'maintenanceTasks' : 'shortTasks'
-    patch.tomorrowPlan = plan[tier].includes(task.id)
-      ? plan
-      : { ...plan, [tier]: [...plan[tier], task.id] }
+    const plan = ensureTomorrowPlan(nextData)
+    const tier = taskTier(taskType)
+    patch.tomorrowPlan = plan[tier].includes(task.id) ? plan : { ...plan, [tier]: [...plan[tier], task.id] }
   }
 
   return { patch, result: toTaskSummary(task) }
+}
+
+/** Builds `{ dailyPlan, tomorrowPlan }` patch entries that put an existing task on
+ *  today's/tomorrow's plan, skipping it if it's already in either tier of that plan. */
+function addExistingTaskToDayPlans(
+  data: SyncData,
+  taskId: string,
+  taskType: TaskType | undefined,
+  opts: { addToToday?: boolean; addToTomorrow?: boolean },
+): Partial<SyncData> {
+  const patch: Partial<SyncData> = {}
+  const tier = taskTier(taskType)
+
+  if (opts.addToToday) {
+    const { plan, patch: rolloverPatch } = ensureTodayPlanForWrite(data)
+    Object.assign(patch, rolloverPatch)
+    if (!planHasTask(plan, taskId)) {
+      patch.dailyPlan = { ...plan, [tier]: [...plan[tier], taskId] }
+    }
+  }
+
+  if (opts.addToTomorrow) {
+    const plan = ensureTomorrowPlan(data)
+    if (!planHasTask(plan, taskId)) {
+      patch.tomorrowPlan = { ...plan, [tier]: [...plan[tier], taskId] }
+    }
+  }
+
+  return patch
 }
 
 export function updateTask(data: SyncData, params: Params): WriteResult<AgentTaskSummary> {
@@ -409,6 +494,8 @@ export function updateTask(data: SyncData, params: Params): WriteResult<AgentTas
   const nextAction = str(params, 'nextAction')
   const kanbanColumn = oneOf(params, 'kanbanColumn', PROJECT_STATUSES)
   const projectId = strOrNull(params, 'projectId')
+  const addToToday = bool(params, 'addToToday') ?? false
+  const addToTomorrow = bool(params, 'addToTomorrow') ?? false
 
   const fieldUpdates: Partial<Task> = {}
   if (newTitle !== undefined) fieldUpdates.title = newTitle
@@ -422,8 +509,9 @@ export function updateTask(data: SyncData, params: Params): WriteResult<AgentTas
       fieldUpdates.projectId = projectId === null ? undefined : projectId
     }
     const updated: Task = { ...loc.task, ...fieldUpdates }
+    const dayPlanPatch = addExistingTaskToDayPlans(data, updated.id, updated.taskType, { addToToday, addToTomorrow })
     return {
-      patch: { recurringTasks: data.recurringTasks.map(t => (t.id === updated.id ? updated : t)) },
+      patch: { recurringTasks: data.recurringTasks.map(t => (t.id === updated.id ? updated : t)), ...dayPlanPatch },
       result: toTaskSummary(updated),
     }
   }
@@ -471,6 +559,7 @@ export function updateTask(data: SyncData, params: Params): WriteResult<AgentTas
   const patch: Partial<SyncData> = {}
   if (projects !== data.projects) patch.projects = projects
   if (orphanTasks !== data.orphanTasks) patch.orphanTasks = orphanTasks
+  Object.assign(patch, addExistingTaskToDayPlans(data, updatedTask.id, updatedTask.taskType, { addToToday, addToTomorrow }))
   return { patch, result: toTaskSummary(updatedTask) }
 }
 
@@ -518,10 +607,19 @@ export function dropTask(data: SyncData, params: Params): WriteResult<AgentTaskS
   return { patch, result: toTaskSummary(updated) }
 }
 
+/** Reads `trackerProjectId`, treating `null` and `""` the same way — both mean "clear the link". */
+function trackerProjectIdParam(params: Params): string | null | undefined {
+  const v = strOrNull(params, 'trackerProjectId')
+  if (v === undefined || v === null) return v
+  const trimmed = v.trim()
+  return trimmed === '' ? null : trimmed
+}
+
 export function addProject(data: SyncData, params: Params): WriteResult<AgentProjectSummary> {
   const projectTitle = title(params)
   const category = oneOf(params, 'category', CATEGORIES) ?? 'personal'
   const status = oneOf(params, 'status', PROJECT_STATUSES) ?? 'backlog'
+  const trackerProjectId = trackerProjectIdParam(params)
 
   const now = nowIso()
   const project: Project = {
@@ -536,6 +634,7 @@ export function addProject(data: SyncData, params: Params): WriteResult<AgentPro
     daysWorkedLog: [],
     createdAt: now,
     updatedAt: now,
+    ...(trackerProjectId ? { trackerProjectId } : {}),
   }
   return { patch: { projects: [...data.projects, project] }, result: toProjectSummary(project) }
 }
@@ -543,8 +642,19 @@ export function addProject(data: SyncData, params: Params): WriteResult<AgentPro
 export function renameProject(data: SyncData, params: Params): WriteResult<AgentProjectSummary> {
   const projectId = str(params, 'projectId', { required: true })!
   const project = findProject(data, projectId)
-  const newTitle = title(params)
-  const updated: Project = { ...project, title: newTitle, updatedAt: nowIso() }
+  const newTitle = params.title !== undefined ? title(params) : undefined
+  const trackerProjectId = trackerProjectIdParam(params)
+
+  if (newTitle === undefined && trackerProjectId === undefined) {
+    badRequest('title or trackerProjectId is required')
+  }
+
+  const updated: Project = {
+    ...project,
+    ...(newTitle !== undefined ? { title: newTitle } : {}),
+    trackerProjectId: trackerProjectId === undefined ? project.trackerProjectId : trackerProjectId === null ? undefined : trackerProjectId,
+    updatedAt: nowIso(),
+  }
   return {
     patch: { projects: data.projects.map(p => (p.id === updated.id ? updated : p)) },
     result: toProjectSummary(updated),

@@ -6,6 +6,7 @@ import {
   runAgentOperation,
   stripUndefined,
 } from './agentOps.js'
+import { listTrackerProjects } from './trackerOps.js'
 
 /**
  * Shared by api/agent.ts (plain HTTP) and api/mcp.ts (MCP tools/call): reads the
@@ -14,6 +15,12 @@ import {
  * onSnapshot listener picks up the write instead of silently losing it.
  */
 export async function executeAgentAction(action: string, params: Record<string, unknown>): Promise<unknown> {
+  // Reads a separate Firebase project's doc, not the Vandaag user doc below — handled
+  // before the isAgentAction/transaction machinery that the rest of this function shares.
+  if (action === 'list_tracker_projects') {
+    return listTrackerProjects(params)
+  }
+
   if (!isAgentAction(action)) {
     throw new AgentOpError(400, `Unknown action: ${action}`)
   }

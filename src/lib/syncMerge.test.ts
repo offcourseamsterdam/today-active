@@ -297,4 +297,22 @@ describe('mergeSyncData (entity + plan behavior)', () => {
     const merged = mergeSyncData(base, local, remote)
     expect(merged.orphanTasks.map(t => t.id).sort()).toEqual(['local-1', 'remote-1'])
   })
+
+  it('preserves a remote-only trackerProjectId (an agent-API set new field) through the merge', () => {
+    const base = emptySyncData({ projects: [project({ id: 'p1' })] })
+    const local = emptySyncData({ projects: [project({ id: 'p1' })] })
+    const remote = emptySyncData({ projects: [project({ id: 'p1', trackerProjectId: 'abcd1234' })] })
+    const merged = mergeSyncData(base, local, remote)
+    expect(merged.projects.find(p => p.id === 'p1')!.trackerProjectId).toBe('abcd1234')
+  })
+
+  it('keeps a local edit to one field alongside a remote-set trackerProjectId on the same project', () => {
+    const base = emptySyncData({ projects: [project({ id: 'p1', title: 'Old title' })] })
+    const local = emptySyncData({ projects: [project({ id: 'p1', title: 'New title' })] })
+    const remote = emptySyncData({ projects: [project({ id: 'p1', title: 'Old title', trackerProjectId: 'abcd1234' })] })
+    const merged = mergeSyncData(base, local, remote)
+    const mergedProject = merged.projects.find(p => p.id === 'p1')!
+    expect(mergedProject.title).toBe('New title')
+    expect(mergedProject.trackerProjectId).toBe('abcd1234')
+  })
 })

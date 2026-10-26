@@ -3,6 +3,7 @@ import type { DailyPlan, Task, PlanItem } from '../types'
 import type { StoreSet, StoreGet } from './types'
 import { ensureTodayPlan, ensureTomorrowPlan, getTodayString, makePlanActions } from './helpers'
 import { deriveItemOrder, deriveBlockOrder } from '../lib/planOrder'
+import { computeDailyPlanRefresh } from '../lib/dailyPlanRollover'
 
 function countShortSlots(
   plan: DailyPlan,
@@ -17,26 +18,6 @@ function countShortSlots(
     }
     return sum + 1
   }, 0)
-}
-
-function rolloverTasks(
-  plan: DailyPlan,
-  allTasks: readonly { id: string; status: string }[],
-): { shortTasks: string[]; maintenanceTasks: string[]; shortProjects: string[]; maintenanceProjects: string[]; deepProjectId: string; pinnedItemIds: string[] } {
-  const done = new Set(plan.completedItemIds ?? [])
-  const pinned = new Set(plan.pinnedItemIds ?? [])
-  const taskDone = (id: string) => done.has(id) || allTasks.find(t => t.id === id)?.status === 'done'
-  const keepTask = (id: string) => pinned.has(id) || !taskDone(id)
-  const keepProject = (id: string) => pinned.has(id) || !done.has(id)
-
-  return {
-    shortTasks: plan.shortTasks.filter(keepTask),
-    maintenanceTasks: plan.maintenanceTasks.filter(keepTask),
-    shortProjects: plan.shortProjects.filter(keepProject),
-    maintenanceProjects: plan.maintenanceProjects.filter(keepProject),
-    deepProjectId: pinned.has(plan.deepBlock.projectId) ? plan.deepBlock.projectId : '',
-    pinnedItemIds: plan.pinnedItemIds ?? [],
-  }
 }
 
 export function makeDailyPlanActions(set: StoreSet, get: StoreGet) {
@@ -353,69 +334,15 @@ export function makeDailyPlanActions(set: StoreSet, get: StoreGet) {
       const today = getTodayString()
       const allTasks = [...(state.orphanTasks ?? []), ...(state.recurringTasks ?? [])]
 
-      // 1. Try to promote tomorrow's plan first
-      if (state.tomorrowPlan && state.tomorrowPlan.date === today) {
-        let promoted = state.tomorrowPlan
-        if (state.dailyPlan && state.dailyPlan.date !== today) {
-          const stale = state.dailyPlan
-          const carried = rolloverTasks(stale, allTasks)
-          const deepConflict = promoted.deepBlock.projectId !== '' && carried.deepProjectId !== ''
-            && promoted.deepBlock.projectId !== carried.deepProjectId
-          const mergedPinnedIds = new Set([...(carried.pinnedItemIds ?? []), ...(promoted.pinnedItemIds ?? [])])
-          if (deepConflict) mergedPinnedIds.delete(carried.deepProjectId)
-          promoted = {
-            ...promoted,
-            shortTasks: Array.from(new Set([...promoted.shortTasks, ...carried.shortTasks])),
-            shortProjects: Array.from(new Set([...promoted.shortProjects, ...carried.shortProjects])),
-            maintenanceTasks: Array.from(new Set([...promoted.maintenanceTasks, ...carried.maintenanceTasks])),
-            maintenanceProjects: Array.from(new Set([...promoted.maintenanceProjects, ...carried.maintenanceProjects])),
-            deepBlock: promoted.deepBlock.projectId
-              ? promoted.deepBlock
-              : (carried.deepProjectId ? { projectId: carried.deepProjectId } : promoted.deepBlock),
-            pinnedItemIds: Array.from(mergedPinnedIds),
-            itemOrder: undefined,
-            blockOrder: undefined,
-          }
-          set({ planHistory: { ...state.planHistory, [stale.date]: stale } })
-        }
-        set({
-          dailyPlan: { ...promoted, isComplete: false, completedAt: undefined },
-          tomorrowPlan: null,
-        })
-        return
-      }
-
-      // 2. Clear stale tomorrow plan
-      if (state.tomorrowPlan && state.tomorrowPlan.date < today) {
-        set({ tomorrowPlan: null })
-      }
-
-      // 3. Archive + rollover stale daily plan
-      if (state.dailyPlan && state.dailyPlan.date !== today) {
-        const stale = state.dailyPlan
-        const carried = rolloverTasks(stale, allTasks)
-        const hasCarry = carried.shortTasks.length > 0
-          || carried.maintenanceTasks.length > 0
-          || carried.shortProjects.length > 0
-          || carried.maintenanceProjects.length > 0
-          || carried.deepProjectId !== ''
-
-        const todayPlan: DailyPlan | null = hasCarry ? {
-          date: today,
-          deepBlock: { projectId: carried.deepProjectId },
-          shortTasks: carried.shortTasks,
-          shortProjects: carried.shortProjects,
-          maintenanceTasks: carried.maintenanceTasks,
-          maintenanceProjects: carried.maintenanceProjects,
-          meetings: [],
-          pinnedItemIds: carried.pinnedItemIds,
-          isComplete: false,
-        } : null
-
-        set({
-          planHistory: { ...state.planHistory, [stale.date]: stale },
-          dailyPlan: todayPlan,
-        })
+      const result = computeDailyPlanRefresh({
+        dailyPlan: state.dailyPlan,
+        tomorrowPlan: state.tomorrowPlan,
+        planHistory: state.planHistory,
+        allTasks,
+        today,
+      })
+      if (result.changed) {
+        set({ dailyPlan: result.dailyPlan, tomorrowPlan: result.tomorrowPlan, planHistory: result.planHistory })
       }
     },
   }

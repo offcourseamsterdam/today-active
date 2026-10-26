@@ -22,24 +22,46 @@ Target uid: `AGENT_UID` if set, else `WRITE_AWAY_UID` (so a single uid env var c
 
 | action | params | notes |
 |---|---|---|
-| `list_projects` | `{ includeDone? }` | `includeDone` defaults false — hides done projects and done/dropped tasks |
+| `list_projects` | `{ includeDone? }` | `includeDone` defaults false — hides done projects and done/dropped tasks. Each project includes `trackerProjectId` if linked |
 | `list_today` | — | resolves `dailyPlan`'s id lists to full task/project objects; `null` unless the plan's date is today in **Europe/Amsterdam** |
 | `list_tomorrow` | — | same, for `tomorrowPlan` and "tomorrow" |
 | `list_orphan_tasks` | — | open (`backlog`) orphan tasks only |
-| `add_task` | `{ title, projectId?, taskType?, nextAction?, kanbanColumn?, addToTomorrow? }` | mirrors the store's task factory (uuid, `status: 'backlog'`, `isRecurring: false`, …); `addToTomorrow` appends to `shortTasks` (or `maintenanceTasks` if `taskType === 'maintenance'`), creating a fresh tomorrow plan if none exists or it's stale |
-| `update_task` | `{ taskId, title?, projectId?, taskType?, nextAction?, kanbanColumn? }` | `projectId: null` moves a project task to orphan; a string moves it to that project (404 if it doesn't exist) |
+| `add_task` | `{ title, projectId?, taskType?, nextAction?, kanbanColumn?, addToToday?, addToTomorrow? }` | mirrors the store's task factory (uuid, `status: 'backlog'`, `isRecurring: false`, …); `addToToday`/`addToTomorrow` append to `shortTasks` (or `maintenanceTasks` if `taskType === 'maintenance'`) of `dailyPlan`/`tomorrowPlan` respectively. `addToTomorrow` creates a fresh tomorrow plan if none exists or it's stale. `addToToday` instead **refreshes** a stale `dailyPlan` first — see below — so it never silently clobbers yesterday's plan |
+| `update_task` | `{ taskId, title?, projectId?, taskType?, nextAction?, kanbanColumn?, addToToday?, addToTomorrow? }` | `projectId: null` moves a project task to orphan; a string moves it to that project (404 if it doesn't exist). `addToToday`/`addToTomorrow` put this existing task onto today's/tomorrow's plan — a no-op if the task is already in either tier of that plan |
 | `complete_task` | `{ taskId }` | `status: 'done'`, `completedAt` set. **Rejects recurring tasks (400)** — the app itself has no wired-up path that marks a recurring task "done" (completion there is tracked via `lastCompletedDate`, which no UI currently writes); rather than invent behavior the app doesn't have, we reject with a clear error |
 | `drop_task` | `{ taskId }` | `status: 'dropped'` — works for recurring tasks too, since it's a plain field flip with no derived semantics. **Never a hard delete**, anywhere |
-| `add_project` | `{ title, category?, status? }` | defaults: `category: 'personal'`, `status: 'backlog'` |
-| `rename_project` | `{ projectId, title }` | bumps `updatedAt` |
+| `add_project` | `{ title, category?, status?, trackerProjectId? }` | defaults: `category: 'personal'`, `status: 'backlog'`. `trackerProjectId` optionally links the new project to an 8-char Off Course Project Tracker project id |
+| `rename_project` | `{ projectId, title?, trackerProjectId? }` | bumps `updatedAt`; at least one of `title`/`trackerProjectId` is required. `trackerProjectId: null` (or `""`) clears the link |
+| `list_tracker_projects` | `{ status?, includeCompleted? }` | **Read-only.** Returns `{ workspaceId, projects }` from the separate "Off Course — Project Tracker" app/Firebase project (see below) — `workspaceId` is included so the caller can see which workspace was actually read. `status` filters to one or a list of tracker statuses; `includeCompleted` defaults true |
 
 All inputs are validated (types, enum membership from `src/types`, title length) → **400**; unknown ids → **404**.
+
+### Tracker integration (`list_tracker_projects`, `api/_lib/trackerOps.ts`)
+
+Read-only bridge into the "Off Course — Project Tracker" app's Firestore doc at `workspaces/{workspaceId}/tracker/state` (fields: `dna`, `people`, `edges`, `goals`, `frames`, `projects`). Each tracker project is normalized defensively (missing fields, `subtasks` as strings or `{title, done}` objects) and returned with `assignees` resolved from `assigneeIds` via `people`, plus `goal`/`frame` when a project's `goalId`/`frameId` resolves to one.
+
+Config (`api/_lib/firebaseAdmin.ts`):
+
+- `TRACKER_WORKSPACE_ID` — the workspace to read. If unset, `TRACKER_USER_UID` is used instead (see below); the absence of **both** makes `getTrackerConfigError()` return `"Tracker is not configured"`.
+- `TRACKER_USER_UID` — optional. When `TRACKER_WORKSPACE_ID` is unset, this is treated as the tracker app's own user uid, and the active workspace is resolved by reading `users/{TRACKER_USER_UID}.workspaceId` from the tracker's Firestore (the tracker app can have several `workspaces` docs named "Off Course," so the uid's own user doc is the source of truth for which one is "active"). `TRACKER_WORKSPACE_ID` wins if both are set. The resolved id is returned as `workspaceId` in the tool result.
+- `TRACKER_FIREBASE_PROJECT_ID` — defaults to `project-tracker-bc5e4`. If it equals Vandaag's own `FIREBASE_PROJECT_ID`, the tracker reuses Vandaag's existing default Firebase Admin app/db. Otherwise a second, **named** admin app (`"tracker"`) is lazily initialized from either `TRACKER_FIREBASE_SERVICE_ACCOUNT` (a full service-account JSON string) or `TRACKER_FIREBASE_CLIENT_EMAIL` + `TRACKER_FIREBASE_PRIVATE_KEY` (same `\n`-unescaping as Vandaag's own credentials).
+- Being unconfigured only affects this one tool — it returns a generic error (never echoing env values) rather than tripping `getAgentConfigError()`'s 503 gate for the whole agent API/MCP endpoint.
+- `getAdminApp()` resolves the app named `'[DEFAULT]'` specifically (not just `getApps()[0]`), so creating the named tracker app first doesn't get mistaken for Vandaag's own app.
+- **Secret safety:** every Firestore read in `trackerOps.ts` goes through a wrapper (`getTrackerDbSafe`) that catches *any* failure from acquiring the tracker's admin app/db — including a malformed `TRACKER_FIREBASE_SERVICE_ACCOUNT` failing `JSON.parse` with a snippet of the secret in its own error message — and rethrows the same generic `AgentOpError(503, 'Tracker is not configured')` with no logging of the original error, so a bad secret can never leak into a response or a log line.
 
 ### Write path
 
 Every write runs inside `db.runTransaction`: read the doc, run the pure op against a normalized snapshot, `tx.update()` **only the changed top-level fields** (e.g. just `projects` and `tomorrowPlan`, not the whole doc) plus a fresh `syncedAt`. Reads never write (no `syncedAt` bump), which the emulator tests assert directly.
 
 `api/_lib/agentOps.ts` has zero Firestore/HTTP imports — it's pure functions over a plain `SyncData` snapshot — so it's unit-testable without the emulator (`api/_lib/agentOps.test.ts`). The emulator tests (`tests/emulator/*.test.ts`) exercise the real transaction + auth + dispatch path end-to-end against `firebase emulators:exec`.
+
+### Stale `dailyPlan` refresh (`src/lib/dailyPlanRollover.ts`, shared)
+
+`addToToday` must not treat a stale `dailyPlan` (the app wasn't opened yet today) as "today's plan" and clobber it — that would silently lose yesterday's plan without archiving it. Instead it mirrors the client's `refreshDailyPlan` (`src/store/plansSlice.ts`): if `tomorrowPlan.date` is today, promote it (merging in any still-unfinished tasks rolled over from a stale `dailyPlan`, which gets archived into `planHistory`); otherwise, if `dailyPlan` is stale, archive it into `planHistory` and roll its unfinished tasks into a fresh plan for today. Only then is the task appended.
+
+That promote/rollover computation (`computeDailyPlanRefresh` + `rolloverTasks`) lives in `src/lib/dailyPlanRollover.ts` — a pure, framework-free module imported by both the client store and `api/_lib/agentOps.ts` (`ensureTodayPlanForWrite`), so the two can't drift apart. `addToTomorrow` is unaffected — a stale `tomorrowPlan` is just rebuilt fresh, as before, since there's nothing to archive-and-roll for a plan that was never "today."
+
+Any `planHistory`/`tomorrowPlan` changes from this refresh are included in the write's patch even if the specific task being added turns out to already be present post-rollover (and is therefore not re-added) — the archive must never be silently dropped.
 
 ### `api/write-away.ts`
 

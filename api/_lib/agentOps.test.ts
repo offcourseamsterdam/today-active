@@ -13,6 +13,7 @@ import {
   dropTask,
   addProject,
   renameProject,
+  updateProject,
   runAgentOperation,
   isAgentAction,
   type SyncData,
@@ -483,9 +484,71 @@ describe('renameProject', () => {
   })
 })
 
+describe('updateProject', () => {
+  it('changes status and bumps updatedAt', () => {
+    const data = baseData({ projects: [project({ id: 'p1', status: 'backlog', updatedAt: '2020-01-01T00:00:00.000Z' })] })
+    const { patch, result } = updateProject(data, { projectId: 'p1', status: 'in_progress' })
+    expect(result.status).toBe('in_progress')
+    expect(patch.projects![0].updatedAt).not.toBe('2020-01-01T00:00:00.000Z')
+  })
+
+  it('changes title and category', () => {
+    const data = baseData({ projects: [project({ id: 'p1' })] })
+    const { result } = updateProject(data, { projectId: 'p1', title: 'Renamed', category: 'ops' })
+    expect(result.title).toBe('Renamed')
+    expect(result.category).toBe('ops')
+  })
+
+  it('sets and clears trackerProjectId', () => {
+    const data = baseData({ projects: [project({ id: 'p1' })] })
+    const { result: linked } = updateProject(data, { projectId: 'p1', trackerProjectId: 'abcd1234' })
+    expect(linked.trackerProjectId).toBe('abcd1234')
+
+    const data2 = baseData({ projects: [project({ id: 'p1', trackerProjectId: 'abcd1234' })] })
+    const { result: cleared } = updateProject(data2, { projectId: 'p1', trackerProjectId: null })
+    expect(cleared.trackerProjectId).toBeUndefined()
+  })
+
+  it('clears waitingOn when moving to done, mirroring moveProject', () => {
+    const data = baseData({ projects: [project({ id: 'p1', status: 'waiting', waitingOn: [{ person: 'Bob', since: '2026-01-01' }] })] })
+    const { patch } = updateProject(data, { projectId: 'p1', status: 'done' })
+    expect(patch.projects![0].waitingOn).toBeUndefined()
+  })
+
+  it('preserves waitingOn when moving to a status other than done', () => {
+    const waitingOn = [{ person: 'Bob', since: '2026-01-01' }]
+    const data = baseData({ projects: [project({ id: 'p1', status: 'waiting', waitingOn })] })
+    const { patch } = updateProject(data, { projectId: 'p1', status: 'in_progress' })
+    expect(patch.projects![0].waitingOn).toEqual(waitingOn)
+  })
+
+  it('throws 404 for an unknown project', () => {
+    expect(() => updateProject(baseData(), { projectId: 'missing', status: 'done' })).toThrow(AgentOpError)
+  })
+
+  it('throws 400 when no field to change is given', () => {
+    const data = baseData({ projects: [project({ id: 'p1' })] })
+    expect(() => updateProject(data, { projectId: 'p1' })).toThrow(AgentOpError)
+  })
+
+  it('rejects an invalid status', () => {
+    const data = baseData({ projects: [project({ id: 'p1' })] })
+    expect(() => updateProject(data, { projectId: 'p1', status: 'bogus' })).toThrow(AgentOpError)
+  })
+
+  it('leaves other projects untouched', () => {
+    const data = baseData({
+      projects: [project({ id: 'p1', title: 'One' }), project({ id: 'p2', title: 'Two', status: 'waiting' })],
+    })
+    const { patch } = updateProject(data, { projectId: 'p1', status: 'in_progress' })
+    expect(patch.projects!.find(p => p.id === 'p2')).toEqual(data.projects[1])
+  })
+})
+
 describe('runAgentOperation / isAgentAction', () => {
   it('recognizes all documented actions', () => {
     expect(isAgentAction('list_projects')).toBe(true)
+    expect(isAgentAction('update_project')).toBe(true)
     expect(isAgentAction('delete_everything')).toBe(false)
   })
 

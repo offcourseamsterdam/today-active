@@ -639,6 +639,41 @@ export function addProject(data: SyncData, params: Params): WriteResult<AgentPro
   return { patch: { projects: [...data.projects, project] }, result: toProjectSummary(project) }
 }
 
+/**
+ * Updates status/title/category/trackerProjectId on an existing project. Mirrors
+ * `moveProject`'s (`src/store/projectsSlice.ts`) only status-change side effect: `waitingOn`
+ * is cleared when the new status is `done` (preserved for every other status). The WIP-limit
+ * gate `moveProject` enforces when moving into `in_progress`/`waiting` is a client-only UX
+ * guard (it pops a "swap" modal for the human to resolve) with no sensible server-side
+ * resolution, so it is intentionally not enforced here.
+ */
+export function updateProject(data: SyncData, params: Params): WriteResult<AgentProjectSummary> {
+  const projectId = str(params, 'projectId', { required: true })!
+  const project = findProject(data, projectId)
+  const newTitle = params.title !== undefined ? title(params) : undefined
+  const status = oneOf(params, 'status', PROJECT_STATUSES)
+  const category = oneOf(params, 'category', CATEGORIES)
+  const trackerProjectId = trackerProjectIdParam(params)
+
+  if (newTitle === undefined && status === undefined && category === undefined && trackerProjectId === undefined) {
+    badRequest('At least one of title, status, category, trackerProjectId is required')
+  }
+
+  const updated: Project = {
+    ...project,
+    ...(newTitle !== undefined ? { title: newTitle } : {}),
+    ...(status !== undefined ? { status } : {}),
+    ...(category !== undefined ? { category } : {}),
+    trackerProjectId: trackerProjectId === undefined ? project.trackerProjectId : trackerProjectId === null ? undefined : trackerProjectId,
+    waitingOn: status === 'done' ? undefined : project.waitingOn,
+    updatedAt: nowIso(),
+  }
+  return {
+    patch: { projects: data.projects.map(p => (p.id === updated.id ? updated : p)) },
+    result: toProjectSummary(updated),
+  }
+}
+
 export function renameProject(data: SyncData, params: Params): WriteResult<AgentProjectSummary> {
   const projectId = str(params, 'projectId', { required: true })!
   const project = findProject(data, projectId)
@@ -671,6 +706,7 @@ export const WRITE_ACTIONS = [
   'drop_task',
   'add_project',
   'rename_project',
+  'update_project',
 ] as const
 export const AGENT_ACTIONS = [...READ_ACTIONS, ...WRITE_ACTIONS] as const
 export type AgentAction = (typeof AGENT_ACTIONS)[number]
@@ -702,5 +738,7 @@ export function runAgentOperation(action: AgentAction, data: SyncData, params: P
       return addProject(data, params)
     case 'rename_project':
       return renameProject(data, params)
+    case 'update_project':
+      return updateProject(data, params)
   }
 }

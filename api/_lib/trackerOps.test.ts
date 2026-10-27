@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { getApps, deleteApp } from 'firebase-admin/app'
-import { summarizeTrackerProjects, listTrackerProjects, type TrackerDoc } from './trackerOps'
+import {
+  summarizeTrackerProjects,
+  listTrackerProjects,
+  applyTrackerProjectUpdate,
+  updateTrackerProject,
+  type TrackerDoc,
+  type RunTrackerProjectUpdate,
+} from './trackerOps'
 import { AgentOpError } from './agentOps'
 
 const ENV_KEYS = [
@@ -209,5 +216,150 @@ describe('listTrackerProjects', () => {
     expect((caught as AgentOpError).message).toBe('Tracker is not configured')
     expect((caught as AgentOpError).message).not.toContain(secretSnippet)
     expect(JSON.stringify(caught)).not.toContain(secretSnippet)
+  })
+})
+
+type RawProject = Record<string, unknown>
+
+function findRaw(projects: unknown[], id: string): RawProject {
+  return (projects as RawProject[]).find(p => p.id === id)!
+}
+
+describe('applyTrackerProjectUpdate', () => {
+  const doc: TrackerDoc = {
+    dna: { appName: 'Off Course' },
+    people: [{ id: 'pe1', name: 'Alice' }],
+    projects: [
+      { id: 'proj0001', title: 'Launch thing', status: 'not_started', startedAt: null, completedAt: null, assigneeIds: ['pe1'] },
+      { id: 'proj0002', title: 'Already going', status: 'in_progress', startedAt: '2026-01-01T00:00:00.000Z', completedAt: null },
+      { id: 'proj0003', title: 'Wrapped up', status: 'completed', startedAt: '2026-01-01T00:00:00.000Z', completedAt: '2026-01-05T00:00:00.000Z' },
+    ],
+  }
+
+  it('changes status and sets startedAt when moving to in_progress for the first time', () => {
+    const { projects, result } = applyTrackerProjectUpdate(doc, { projectId: 'proj0001', status: 'in_progress' })
+    expect(result.previousStatus).toBe('not_started')
+    expect(result.project.status).toBe('in_progress')
+    const raw = findRaw(projects, 'proj0001')
+    expect(raw.status).toBe('in_progress')
+    expect(raw.startedAt).toBeTruthy()
+  })
+
+  it('does not clobber an existing startedAt when moving to in_progress again (resumeProject semantics)', () => {
+    const { projects } = applyTrackerProjectUpdate(doc, { projectId: 'proj0002', status: 'in_progress' })
+    const raw = findRaw(projects, 'proj0002')
+    expect(raw.startedAt).toBe('2026-01-01T00:00:00.000Z')
+  })
+
+  it('sets completedAt to now when moving to completed', () => {
+    const { projects } = applyTrackerProjectUpdate(doc, { projectId: 'proj0002', status: 'completed' })
+    const raw = findRaw(projects, 'proj0002')
+    expect(raw.status).toBe('completed')
+    expect(raw.completedAt).toBeTruthy()
+  })
+
+  it('clears completedAt when moving away from completed', () => {
+    const { projects } = applyTrackerProjectUpdate(doc, { projectId: 'proj0003', status: 'paused' })
+    const raw = findRaw(projects, 'proj0003')
+    expect(raw.status).toBe('paused')
+    expect(raw.completedAt).toBeNull()
+  })
+
+  it('does not touch startedAt/completedAt when moving to paused', () => {
+    const { projects } = applyTrackerProjectUpdate(doc, { projectId: 'proj0002', status: 'paused' })
+    const raw = findRaw(projects, 'proj0002')
+    expect(raw.status).toBe('paused')
+    expect(raw.startedAt).toBe('2026-01-01T00:00:00.000Z')
+    expect(raw.completedAt).toBeNull()
+  })
+
+  it('updates title and urgency, and returns the project summary', () => {
+    const { result } = applyTrackerProjectUpdate(doc, { projectId: 'proj0001', title: ' Renamed ', urgency: 'high' })
+    expect(result.project.title).toBe('Renamed')
+    expect(result.project.urgency).toBe('high')
+    expect(result.project.assignees).toEqual(['Alice'])
+  })
+
+  it('accepts a numeric urgency', () => {
+    const { result } = applyTrackerProjectUpdate(doc, { projectId: 'proj0001', urgency: 3 })
+    expect(result.project.urgency).toBe(3)
+  })
+
+  it('throws a 404 for an unknown project id', () => {
+    expect(() => applyTrackerProjectUpdate(doc, { projectId: 'nope', status: 'paused' })).toThrow(AgentOpError)
+    try {
+      applyTrackerProjectUpdate(doc, { projectId: 'nope', status: 'paused' })
+    } catch (err) {
+      expect((err as AgentOpError).status).toBe(404)
+    }
+  })
+
+  it('rejects a missing projectId', () => {
+    expect(() => applyTrackerProjectUpdate(doc, { status: 'paused' })).toThrow('projectId is required')
+  })
+
+  it('rejects when no field to change is given', () => {
+    expect(() => applyTrackerProjectUpdate(doc, { projectId: 'proj0001' })).toThrow(
+      'At least one of status, title, urgency is required',
+    )
+  })
+
+  it('rejects an invalid status', () => {
+    expect(() => applyTrackerProjectUpdate(doc, { projectId: 'proj0001', status: 'bogus' })).toThrow(AgentOpError)
+  })
+
+  it('rejects an empty title', () => {
+    expect(() => applyTrackerProjectUpdate(doc, { projectId: 'proj0001', title: '   ' })).toThrow('title must not be empty')
+  })
+
+  it('rejects a non-primitive urgency', () => {
+    expect(() => applyTrackerProjectUpdate(doc, { projectId: 'proj0001', urgency: { bad: true } })).toThrow(
+      'urgency must be a string or number',
+    )
+  })
+
+  it('leaves other projects and other top-level doc fields untouched', () => {
+    const { projects } = applyTrackerProjectUpdate(doc, { projectId: 'proj0001', status: 'in_progress' })
+    const originalProjects = doc.projects as RawProject[]
+    expect(findRaw(projects, 'proj0002')).toEqual(originalProjects[1])
+    expect(findRaw(projects, 'proj0003')).toEqual(originalProjects[2])
+    // the function only ever returns `projects` — callers write back nothing else, so
+    // `dna`/`people`/etc. on the original doc are never part of what gets written.
+    expect(doc.dna).toEqual({ appName: 'Off Course' })
+    expect(doc.people).toEqual([{ id: 'pe1', name: 'Alice' }])
+  })
+
+  it('preserves unknown fields on the target project', () => {
+    const docWithExtra: TrackerDoc = {
+      projects: [{ id: 'proj0009', title: 'X', status: 'not_started', someUnknownField: 'keep-me' }],
+    }
+    const { projects } = applyTrackerProjectUpdate(docWithExtra, { projectId: 'proj0009', status: 'paused' })
+    const raw = findRaw(projects, 'proj0009')
+    expect(raw.someUnknownField).toBe('keep-me')
+  })
+})
+
+describe('updateTrackerProject', () => {
+  it('throws the generic 503 when not configured, without resolving a workspace or running the update', async () => {
+    const readUser = vi.fn()
+    const runUpdate = vi.fn()
+    await expect(updateTrackerProject({ projectId: 'proj0001', status: 'paused' }, readUser, runUpdate)).rejects.toThrow(
+      'Tracker is not configured',
+    )
+    expect(readUser).not.toHaveBeenCalled()
+    expect(runUpdate).not.toHaveBeenCalled()
+  })
+
+  it('resolves the workspace and delegates to the injected transaction runner', async () => {
+    process.env.TRACKER_WORKSPACE_ID = 'ws1'
+    process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080'
+    const readUser = vi.fn()
+    const runUpdate: RunTrackerProjectUpdate = vi.fn().mockImplementation(async (workspaceId, mutate) => {
+      expect(workspaceId).toBe('ws1')
+      return mutate({ projects: [{ id: 'proj0001', title: 'X', status: 'not_started' }] }).result
+    })
+    const result = await updateTrackerProject({ projectId: 'proj0001', status: 'in_progress' }, readUser, runUpdate)
+    expect(result.project.status).toBe('in_progress')
+    expect(result.previousStatus).toBe('not_started')
   })
 })

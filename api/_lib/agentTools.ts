@@ -42,7 +42,7 @@ export const MCP_TOOLS: McpToolDef[] = [
   },
   {
     name: 'add_task',
-    description: 'Creates a new task, optionally attached to a project and/or added to tomorrow\'s plan.',
+    description: 'Creates a new task, optionally attached to a project and/or added to tomorrow\'s plan. If projectId is given and that project is linked to a tracker project, also best-effort creates a mirrored subtask there (reported in the `tracker` field: `{updated: true}` | `{skipped}` | `{error}`; omitted entirely when the project isn\'t linked).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -59,7 +59,7 @@ export const MCP_TOOLS: McpToolDef[] = [
   },
   {
     name: 'update_task',
-    description: 'Updates fields on an existing task, and/or moves it between projects (or to orphan with projectId: null).',
+    description: 'Updates fields on an existing task, and/or moves it between projects (or to orphan with projectId: null). Best-effort mirrors a title change or a project move into/out of a tracker-linked project (reported in `tracker`, same convention as add_task).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -77,7 +77,7 @@ export const MCP_TOOLS: McpToolDef[] = [
   },
   {
     name: 'complete_task',
-    description: 'Marks a task done (sets status and completedAt). Not supported for recurring tasks.',
+    description: 'Marks a task done (sets status and completedAt). Not supported for recurring tasks. Best-effort pushes done: true to a tracker-linked project\'s mirrored subtask (reported in `tracker`, same convention as add_task).',
     inputSchema: {
       type: 'object',
       properties: { taskId: { type: 'string' } },
@@ -86,7 +86,7 @@ export const MCP_TOOLS: McpToolDef[] = [
   },
   {
     name: 'drop_task',
-    description: 'Marks a task dropped. This never deletes data.',
+    description: 'Marks a task dropped. This never deletes data. Best-effort removes the mirrored subtask from a tracker-linked project (reported in `tracker`, same convention as add_task).',
     inputSchema: {
       type: 'object',
       properties: { taskId: { type: 'string' } },
@@ -105,6 +105,15 @@ export const MCP_TOOLS: McpToolDef[] = [
         trackerProjectId: {
           type: 'string',
           description: 'Links this project to an 8-char Off Course Project Tracker project id.',
+        },
+        marketingCode: { type: 'string', description: 'The UTM/source code used in this project\'s marketing links. Max 200 chars.' },
+        marketingPeriod: {
+          type: 'object',
+          properties: {
+            from: { type: 'string', description: 'YYYY-MM-DD' },
+            to: { type: 'string', description: 'YYYY-MM-DD' },
+          },
+          description: 'Campaign window. from must be on or before to when both are set.',
         },
       },
       required: ['title'],
@@ -129,7 +138,7 @@ export const MCP_TOOLS: McpToolDef[] = [
   {
     name: 'update_project',
     description:
-      "Updates status/title/category on a Vandaag project, and/or sets its trackerProjectId link. Clears waitingOn when the new status is \"done\" (mirrors the app's own status-change button). Set syncStatus: true to also push the new status to its linked tracker project after this write commits (reported in the `tracker` field of the result; never rolled back if the tracker call fails).",
+      "Updates status/title/category/marketingCode/marketingPeriod on a Vandaag project, and/or sets its trackerProjectId link. Clears waitingOn when the new status is \"done\" (mirrors the app's own status-change button). Set syncStatus: true to also push the new status to its linked tracker project after this write commits (reported in the `tracker` field of the result; never rolled back if the tracker call fails).",
     inputSchema: {
       type: 'object',
       properties: {
@@ -140,6 +149,18 @@ export const MCP_TOOLS: McpToolDef[] = [
         trackerProjectId: {
           type: ['string', 'null'],
           description: 'Links this project to an 8-char Off Course Project Tracker project id, or null to clear the link.',
+        },
+        marketingCode: {
+          type: ['string', 'null'],
+          description: 'The UTM/source code used in this project\'s marketing links. Max 200 chars. Null or "" clears it.',
+        },
+        marketingPeriod: {
+          type: ['object', 'null'],
+          properties: {
+            from: { type: 'string', description: 'YYYY-MM-DD' },
+            to: { type: 'string', description: 'YYYY-MM-DD' },
+          },
+          description: 'Campaign window. from must be on or before to when both are set. Null clears it; an object with neither from nor to also clears it.',
         },
         syncStatus: {
           type: 'boolean',
@@ -186,7 +207,7 @@ export const MCP_TOOLS: McpToolDef[] = [
   {
     name: 'tracker_sync_report',
     description:
-      'Read-only: compares Vandaag projects against linked Off Course Project Tracker projects. Reports (a) status mismatches on linked pairs, (b) broken links (trackerProjectId pointing at a tracker project that no longer exists), (c) unlinked Vandaag projects with likely tracker matches by normalized title (restricted to tracker projects not already linked elsewhere), (d) tracker projects not linked from any Vandaag project, and (e) duplicates (two+ Vandaag projects linked to the same tracker project, and near-identical titles within each app). Status mismatches and duplicates always cover every project; includeDone only narrows (c)/(d).',
+      'Read-only: compares Vandaag projects against linked Off Course Project Tracker projects. Reports (a) status mismatches on linked pairs, (b) broken links (trackerProjectId pointing at a tracker project that no longer exists), (c) unlinked Vandaag projects with likely tracker matches by normalized title (restricted to tracker projects not already linked elsewhere), (d) tracker projects not linked from any Vandaag project, (e) duplicates (two+ Vandaag projects linked to the same tracker project, and near-identical titles within each app), and (f) a `tasks` section — `pendingChanges` (what sync_tracker_tasks would do) and `unlinkedSubtasks` (tracker subtasks with no vandaagTaskId link). Status mismatches and duplicates always cover every project; includeDone only narrows (c)/(d). Also opportunistically logs any tracker-app drift detected since the last sync call (see list_changes).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -210,6 +231,63 @@ export const MCP_TOOLS: McpToolDef[] = [
           items: { type: 'string' },
           description: 'Limit to these Vandaag project ids. Omit to consider every linked project.',
         },
+      },
+    },
+  },
+  {
+    name: 'sync_tracker_tasks',
+    description:
+      'Two-way sync between Vandaag project tasks and Off Course Project Tracker subtasks, for every project linked via trackerProjectId (or just projectIds). A tracker subtask carries vandaagTaskId once linked; matching is always by that id, never by title, so nothing is ever duplicated. Per linked task: creates a subtask if none exists; removes it if the task was dropped; moves it if the task moved to a different linked project; otherwise resolves any title/done disagreement using the last-seen tracker snapshot — only the side that actually changed since the last sync wins, or if both changed, title follows Vandaag and done is sticky-true (never un-synced back to open; an exclusive tracker-side un-complete still works). Tracker subtasks with no vandaagTaskId are left alone and reported as unlinkedSubtasks, unless importUnlinked creates a Vandaag task for them and stamps the link on. Defaults to a dry run (dryRun: true) that only reports the plan; pass dryRun: false to apply it to both sides. Returns { dryRun, changes, unlinkedSubtasks, importedTasks, tracker }, where tracker mirrors the {updated}|{skipped}|{error} convention used elsewhere for the tracker-side write.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Limit to these Vandaag project ids. Omit to consider every linked project.',
+        },
+        dryRun: { type: 'boolean', description: 'Defaults to true (report only). Pass false to apply the changes to both Vandaag and the tracker.' },
+        importUnlinked: {
+          type: 'boolean',
+          description: 'Defaults to false. When true, creates a Vandaag task (in the linked project) for every unlinked tracker subtask and stamps vandaagTaskId onto it.',
+        },
+      },
+    },
+  },
+  {
+    name: 'list_changes',
+    description:
+      'Read-only: lists change-log entries (users/{uid}/changes), newest first. Logs every agent-API write (side "agent") plus tracker-app drift detected on sync/report calls (side "tracker"). before/after only ever contain the fields that actually changed.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        since: { type: 'string', description: 'ISO timestamp; only entries at or after this time.' },
+        side: { type: 'string', enum: ['vandaag', 'tracker', 'agent'] },
+        entity: { type: 'string', enum: ['project', 'task', 'subtask', 'deepBlock'] },
+        limit: { type: 'number', description: 'Defaults to 50, max 500.' },
+      },
+    },
+  },
+  {
+    name: 'complete_deep_block',
+    description:
+      'Marks a deep block done for a date (defaults to today, Europe/Amsterdam) and records it in the durable deep-block log used by deep_block_stats. For today, also mirrors the app\'s own "Done" button: clears dailyPlan.deepBlock.projectId and stamps completedProjectTitle/completedAt (rolling over a stale dailyPlan first, same as addToToday). Idempotent per date. category defaults to the active deep-block project\'s category (marketing -> "marketing", everything else -> "other"); required explicitly for a non-today date or when there is no active project to derive it from.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        date: { type: 'string', description: 'YYYY-MM-DD, defaults to today (Europe/Amsterdam).' },
+        category: { type: 'string', enum: ['marketing', 'other'] },
+      },
+    },
+  },
+  {
+    name: 'deep_block_stats',
+    description:
+      'Read-only: weekly deep-block completion counts (per ISO week, Europe/Amsterdam) for the trailing N weeks, split by category, plus current/longest streak. Streaks count consecutive workdays (Mon-Fri) with at least one completion — weekends neither break nor extend a streak, though a weekend completion still counts in that week\'s totals. The current streak gives today a grace day (not done yet doesn\'t break it, since the day isn\'t over).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        weeks: { type: 'number', description: 'Defaults to 8, max 52.' },
       },
     },
   },

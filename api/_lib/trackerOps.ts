@@ -17,8 +17,10 @@ export interface TrackerPersonRef {
 }
 
 export interface TrackerSubtask {
+  id?: string           // absent for legacy string-form subtasks with no stable id
   title: string
   done: boolean
+  vandaagTaskId?: string // set when this subtask is linked to a Vandaag task (sync_tracker_tasks)
 }
 
 export interface TrackerLinkedEntity {
@@ -42,15 +44,15 @@ export interface TrackerProjectSummary {
 export type TrackerDoc = Record<string, unknown>
 export type ReadTrackerDoc = (workspaceId: string) => Promise<TrackerDoc | undefined>
 
-function toArray(v: unknown): unknown[] {
+export function toArray(v: unknown): unknown[] {
   return Array.isArray(v) ? v : []
 }
 
-function toStr(v: unknown): string | undefined {
+export function toStr(v: unknown): string | undefined {
   return typeof v === 'string' ? v : undefined
 }
 
-function toObject(v: unknown): Record<string, unknown> | undefined {
+export function toObject(v: unknown): Record<string, unknown> | undefined {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined
 }
 
@@ -70,7 +72,14 @@ function normalizeSubtask(raw: unknown): TrackerSubtask | null {
   if (!obj) return null
   const t = toStr(obj.title) ?? toStr(obj.name)
   if (!t) return null
-  return { title: t, done: !!obj.done }
+  const id = toStr(obj.id)
+  const vandaagTaskId = toStr(obj.vandaagTaskId)
+  return {
+    ...(id ? { id } : {}),
+    title: t,
+    done: !!obj.done,
+    ...(vandaagTaskId ? { vandaagTaskId } : {}),
+  }
 }
 
 function findLinkedEntity(list: unknown[], id: unknown): TrackerLinkedEntity | undefined {
@@ -300,15 +309,10 @@ export function applyTrackerProjectUpdate(
   return { projects, result: { project: projectSummaryFromDoc(doc, updated), previousStatus } }
 }
 
-export type RunTrackerProjectUpdate = (
-  workspaceId: string,
-  mutate: (doc: TrackerDoc | undefined) => { projects: unknown[]; result: TrackerProjectUpdateResult },
-) => Promise<TrackerProjectUpdateResult>
+/** Generic version of the transaction below: read the tracker doc fresh, run `mutate`, write back only `projects`. Shared by `update_tracker_project` and `sync_tracker_tasks` (trackerTasks.ts) so both write through the exact same minimal, transactional path. */
+export type MutateTrackerDoc<T> = (doc: TrackerDoc | undefined) => { projects: unknown[]; result: T }
 
-async function defaultRunTrackerProjectUpdate(
-  workspaceId: string,
-  mutate: (doc: TrackerDoc | undefined) => { projects: unknown[]; result: TrackerProjectUpdateResult },
-): Promise<TrackerProjectUpdateResult> {
+async function defaultRunTrackerDocMutation<T>(workspaceId: string, mutate: MutateTrackerDoc<T>): Promise<T> {
   const db = getTrackerDbSafe()
   const ref = db.collection('workspaces').doc(workspaceId).collection('tracker').doc('state')
   return db.runTransaction(async tx => {
@@ -318,6 +322,50 @@ async function defaultRunTrackerProjectUpdate(
     tx.update(ref, { projects })
     return result
   })
+}
+
+export type RunTrackerProjectUpdate = (
+  workspaceId: string,
+  mutate: (doc: TrackerDoc | undefined) => { projects: unknown[]; result: TrackerProjectUpdateResult },
+) => Promise<TrackerProjectUpdateResult>
+
+const defaultRunTrackerProjectUpdate: RunTrackerProjectUpdate = defaultRunTrackerDocMutation
+
+/**
+ * Entry point for `sync_tracker_tasks`: resolves the workspace and runs `mutate` against the
+ * tracker doc freshly read inside its own transaction, writing back only `projects` when
+ * `mutate` asks for a change. `readUserWorkspaceId`/`runMutation` are injected for tests.
+ */
+export async function runTrackerDocMutation<T>(
+  mutate: MutateTrackerDoc<T>,
+  readUserWorkspaceId: ReadTrackerUserWorkspaceId = defaultReadTrackerUserWorkspaceId,
+  runMutation: <U>(workspaceId: string, mutate: MutateTrackerDoc<U>) => Promise<U> = defaultRunTrackerDocMutation,
+): Promise<T> {
+  const configError = getTrackerConfigError()
+  if (configError) throw new AgentOpError(503, configError)
+  const workspaceId = await resolveWorkspaceId(readUserWorkspaceId)
+  return runMutation(workspaceId, mutate)
+}
+
+export interface RawTrackerDocResult {
+  workspaceId: string
+  doc: TrackerDoc | undefined
+}
+
+/**
+ * Entry point for `sync_tracker_tasks`'s read side: the *raw* tracker doc (not the
+ * normalized summaries `list_tracker_projects` returns), so unknown per-subtask fields
+ * survive untouched all the way into `trackerTasks.ts`'s plan.
+ */
+export async function readRawTrackerDoc(
+  readTrackerDoc: ReadTrackerDoc = defaultReadTrackerDoc,
+  readUserWorkspaceId: ReadTrackerUserWorkspaceId = defaultReadTrackerUserWorkspaceId,
+): Promise<RawTrackerDocResult> {
+  const configError = getTrackerConfigError()
+  if (configError) throw new AgentOpError(503, configError)
+  const workspaceId = await resolveWorkspaceId(readUserWorkspaceId)
+  const doc = await readTrackerDoc(workspaceId)
+  return { workspaceId, doc }
 }
 
 /**

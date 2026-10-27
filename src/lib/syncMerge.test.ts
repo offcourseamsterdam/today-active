@@ -236,6 +236,53 @@ describe('mergeSyncData', () => {
   })
 })
 
+describe('mergeSyncData (marketingCode/marketingPeriod survive — agent-added project fields)', () => {
+  // `mergeProjectEntity` (syncMerge.ts) merges a project's fields generically by whatever
+  // keys are actually present on the object — there's no fixed field whitelist — so a field
+  // this test suite (or any client build) doesn't explicitly know about still merges
+  // correctly as long as it round-trips through Firestore like any other project field.
+  it('keeps a marketingCode added remotely (e.g. by the agent) when local never touched the project', () => {
+    const base = emptySyncData({ projects: [project({ id: 'p1' })] })
+    const local = emptySyncData({ projects: [project({ id: 'p1' })] })
+    const remote = emptySyncData({ projects: [project({ id: 'p1', marketingCode: 'SPRING26' })] })
+
+    const merged = mergeSyncData(base, local, remote)
+    expect(merged.projects[0].marketingCode).toBe('SPRING26')
+  })
+
+  it('keeps a marketingPeriod set locally alongside an unrelated remote status change (per-key merge)', () => {
+    const base = emptySyncData({ projects: [project({ id: 'p1', status: 'backlog' })] })
+    const local = emptySyncData({
+      projects: [project({ id: 'p1', status: 'backlog', marketingPeriod: { from: '2026-03-01', to: '2026-03-31' } })],
+    })
+    const remote = emptySyncData({ projects: [project({ id: 'p1', status: 'in_progress' })] })
+
+    const merged = mergeSyncData(base, local, remote)
+    expect(merged.projects[0].marketingPeriod).toEqual({ from: '2026-03-01', to: '2026-03-31' })
+    expect(merged.projects[0].status).toBe('in_progress') // the unrelated remote change survives too
+  })
+
+  it('local wins when both sides changed marketingCode since base', () => {
+    const base = emptySyncData({ projects: [project({ id: 'p1', marketingCode: 'OLD' })] })
+    const local = emptySyncData({ projects: [project({ id: 'p1', marketingCode: 'LOCAL' })] })
+    const remote = emptySyncData({ projects: [project({ id: 'p1', marketingCode: 'REMOTE' })] })
+
+    const merged = mergeSyncData(base, local, remote)
+    expect(merged.projects[0].marketingCode).toBe('LOCAL')
+  })
+
+  it('a remotely cleared marketingCode (agent set it to null, deepClean-persisted) is honored when local never touched it', () => {
+    const base = emptySyncData({ projects: [project({ id: 'p1', marketingCode: 'OLD' })] })
+    const local = emptySyncData({ projects: [project({ id: 'p1', marketingCode: 'OLD' })] })
+    // deepClean() turns `undefined` into `null` before writing — so a cleared field comes
+    // back from Firestore as `null`, not a missing key.
+    const remote = emptySyncData({ projects: [{ ...project({ id: 'p1' }), marketingCode: null } as never] })
+
+    const merged = mergeSyncData(base, local, remote)
+    expect(merged.projects[0].marketingCode).toBeFalsy()
+  })
+})
+
 describe('mergeSyncData (entity + plan behavior)', () => {
   it('merges projects including their nested tasks by id', () => {
     const sharedTask = task({ id: 't1', title: 'shared', projectId: 'p1' })

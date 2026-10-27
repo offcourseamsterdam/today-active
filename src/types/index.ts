@@ -23,6 +23,11 @@ export interface WaitingOn {
   snoozedUntil?: string // ISO date — hide from follow-up panel until this date
 }
 
+export interface MarketingPeriod {
+  from?: string // YYYY-MM-DD
+  to?: string   // YYYY-MM-DD
+}
+
 export interface Project {
   id: string
   title: string
@@ -39,6 +44,8 @@ export interface Project {
   missionCritical?: boolean
   goalId?: string          // links this project to one Objective — one goal per project
   trackerProjectId?: string  // links this project to an 8-char id in the Off Course Project Tracker app
+  marketingCode?: string      // UTM/source code used in this project's marketing links
+  marketingPeriod?: MarketingPeriod // campaign window
   daysWorked: number
   daysWorkedLog: string[] // Array of date strings (YYYY-MM-DD)
   waitingOn?: WaitingOn[]

@@ -17,6 +17,7 @@ import type {
   Meeting,
   Settings,
   WriteAwayEntry,
+  MarketingPeriod,
 } from '../../src/types/index.js'
 import { computeDailyPlanRefresh } from '../../src/lib/dailyPlanRollover.js'
 
@@ -150,18 +151,18 @@ function nowIso(): string {
 
 // ── lookups ─────────────────────────────────────────────────────────────
 
-function findProject(data: SyncData, projectId: string): Project {
+export function findProject(data: SyncData, projectId: string): Project {
   const project = data.projects.find(p => p.id === projectId)
   if (!project) notFound(`Project not found: ${projectId}`)
   return project
 }
 
-type TaskLocation =
+export type TaskLocation =
   | { kind: 'project'; project: Project; task: Task }
   | { kind: 'orphan'; task: Task }
   | { kind: 'recurring'; task: Task }
 
-function locateTask(data: SyncData, taskId: string): TaskLocation {
+export function locateTask(data: SyncData, taskId: string): TaskLocation {
   for (const project of data.projects) {
     const task = project.tasks.find(t => t.id === taskId)
     if (task) return { kind: 'project', project, task }
@@ -207,6 +208,8 @@ export interface AgentProjectSummary {
   status: ProjectStatus
   category: Category
   trackerProjectId?: string
+  marketingCode?: string
+  marketingPeriod?: MarketingPeriod
   tasks: AgentTaskSummary[]
 }
 
@@ -246,6 +249,8 @@ function toProjectSummary(p: Project): AgentProjectSummary {
     status: p.status,
     category: p.category,
     ...(p.trackerProjectId ? { trackerProjectId: p.trackerProjectId } : {}),
+    ...(p.marketingCode ? { marketingCode: p.marketingCode } : {}),
+    ...(p.marketingPeriod ? { marketingPeriod: p.marketingPeriod } : {}),
     tasks: p.tasks.map(toTaskSummary),
   }
 }
@@ -368,7 +373,7 @@ function ensureTomorrowPlan(data: SyncData): DailyPlan {
  * plus any planHistory/tomorrowPlan/dailyPlan changes that must be persisted even
  * if the caller ends up not appending anything (e.g. a no-duplicate skip).
  */
-function ensureTodayPlanForWrite(data: SyncData): { plan: DailyPlan; patch: Partial<SyncData> } {
+export function ensureTodayPlanForWrite(data: SyncData): { plan: DailyPlan; patch: Partial<SyncData> } {
   const today = amsterdamDateString(0)
   if (data.dailyPlan && data.dailyPlan.date === today) {
     return { plan: ensureTodayPlan(data), patch: {} }
@@ -615,11 +620,66 @@ function trackerProjectIdParam(params: Params): string | null | undefined {
   return trimmed === '' ? null : trimmed
 }
 
+const MARKETING_CODE_MAX_LENGTH = 200
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+/** Reads `marketingCode`, treating `null` and `""` the same way — both mean "clear it". */
+function marketingCodeParam(params: Params): string | null | undefined {
+  const v = strOrNull(params, 'marketingCode')
+  if (v === undefined || v === null) return v
+  const trimmed = v.trim()
+  if (trimmed === '') return null
+  if (trimmed.length > MARKETING_CODE_MAX_LENGTH) {
+    badRequest(`marketingCode must be at most ${MARKETING_CODE_MAX_LENGTH} characters`)
+  }
+  return trimmed
+}
+
+function isValidDateString(v: string): boolean {
+  if (!DATE_RE.test(v)) return false
+  return !Number.isNaN(new Date(`${v}T00:00:00.000Z`).getTime())
+}
+
+/** Reads `marketingPeriod`: `null` clears it; an object with neither `from` nor `to` also clears it. */
+function marketingPeriodParam(params: Params): MarketingPeriod | null | undefined {
+  const v = params.marketingPeriod
+  if (v === undefined) return undefined
+  if (v === null) return null
+  if (typeof v !== 'object' || Array.isArray(v)) badRequest('marketingPeriod must be an object')
+  const obj = v as Record<string, unknown>
+  const allowedKeys = new Set(['from', 'to'])
+  for (const key of Object.keys(obj)) {
+    if (!allowedKeys.has(key)) badRequest(`marketingPeriod.${key} is not a recognized field`)
+  }
+
+  let from: string | undefined
+  if (obj.from !== undefined && obj.from !== null) {
+    if (typeof obj.from !== 'string' || !isValidDateString(obj.from)) {
+      badRequest('marketingPeriod.from must be a YYYY-MM-DD date string')
+    }
+    from = obj.from
+  }
+  let to: string | undefined
+  if (obj.to !== undefined && obj.to !== null) {
+    if (typeof obj.to !== 'string' || !isValidDateString(obj.to)) {
+      badRequest('marketingPeriod.to must be a YYYY-MM-DD date string')
+    }
+    to = obj.to
+  }
+  if (from !== undefined && to !== undefined && from > to) {
+    badRequest('marketingPeriod.from must be on or before marketingPeriod.to')
+  }
+  if (from === undefined && to === undefined) return null
+  return { ...(from !== undefined ? { from } : {}), ...(to !== undefined ? { to } : {}) }
+}
+
 export function addProject(data: SyncData, params: Params): WriteResult<AgentProjectSummary> {
   const projectTitle = title(params)
   const category = oneOf(params, 'category', CATEGORIES) ?? 'personal'
   const status = oneOf(params, 'status', PROJECT_STATUSES) ?? 'backlog'
   const trackerProjectId = trackerProjectIdParam(params)
+  const marketingCode = marketingCodeParam(params)
+  const marketingPeriod = marketingPeriodParam(params)
 
   const now = nowIso()
   const project: Project = {
@@ -635,6 +695,8 @@ export function addProject(data: SyncData, params: Params): WriteResult<AgentPro
     createdAt: now,
     updatedAt: now,
     ...(trackerProjectId ? { trackerProjectId } : {}),
+    ...(marketingCode ? { marketingCode } : {}),
+    ...(marketingPeriod ? { marketingPeriod } : {}),
   }
   return { patch: { projects: [...data.projects, project] }, result: toProjectSummary(project) }
 }
@@ -654,9 +716,18 @@ export function updateProject(data: SyncData, params: Params): WriteResult<Agent
   const status = oneOf(params, 'status', PROJECT_STATUSES)
   const category = oneOf(params, 'category', CATEGORIES)
   const trackerProjectId = trackerProjectIdParam(params)
+  const marketingCode = marketingCodeParam(params)
+  const marketingPeriod = marketingPeriodParam(params)
 
-  if (newTitle === undefined && status === undefined && category === undefined && trackerProjectId === undefined) {
-    badRequest('At least one of title, status, category, trackerProjectId is required')
+  if (
+    newTitle === undefined &&
+    status === undefined &&
+    category === undefined &&
+    trackerProjectId === undefined &&
+    marketingCode === undefined &&
+    marketingPeriod === undefined
+  ) {
+    badRequest('At least one of title, status, category, trackerProjectId, marketingCode, marketingPeriod is required')
   }
 
   const updated: Project = {
@@ -665,6 +736,8 @@ export function updateProject(data: SyncData, params: Params): WriteResult<Agent
     ...(status !== undefined ? { status } : {}),
     ...(category !== undefined ? { category } : {}),
     trackerProjectId: trackerProjectId === undefined ? project.trackerProjectId : trackerProjectId === null ? undefined : trackerProjectId,
+    marketingCode: marketingCode === undefined ? project.marketingCode : marketingCode === null ? undefined : marketingCode,
+    marketingPeriod: marketingPeriod === undefined ? project.marketingPeriod : marketingPeriod === null ? undefined : marketingPeriod,
     waitingOn: status === 'done' ? undefined : project.waitingOn,
     updatedAt: nowIso(),
   }

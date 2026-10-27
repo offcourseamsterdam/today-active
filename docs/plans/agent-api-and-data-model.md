@@ -26,17 +26,21 @@ Target uid: `AGENT_UID` if set, else `WRITE_AWAY_UID` (so a single uid env var c
 | `list_today` | — | resolves `dailyPlan`'s id lists to full task/project objects; `null` unless the plan's date is today in **Europe/Amsterdam** |
 | `list_tomorrow` | — | same, for `tomorrowPlan` and "tomorrow" |
 | `list_orphan_tasks` | — | open (`backlog`) orphan tasks only |
-| `add_task` | `{ title, projectId?, taskType?, nextAction?, kanbanColumn?, addToToday?, addToTomorrow? }` | mirrors the store's task factory (uuid, `status: 'backlog'`, `isRecurring: false`, …); `addToToday`/`addToTomorrow` append to `shortTasks` (or `maintenanceTasks` if `taskType === 'maintenance'`) of `dailyPlan`/`tomorrowPlan` respectively. `addToTomorrow` creates a fresh tomorrow plan if none exists or it's stale. `addToToday` instead **refreshes** a stale `dailyPlan` first — see below — so it never silently clobbers yesterday's plan |
-| `update_task` | `{ taskId, title?, projectId?, taskType?, nextAction?, kanbanColumn?, addToToday?, addToTomorrow? }` | `projectId: null` moves a project task to orphan; a string moves it to that project (404 if it doesn't exist). `addToToday`/`addToTomorrow` put this existing task onto today's/tomorrow's plan — a no-op if the task is already in either tier of that plan |
-| `complete_task` | `{ taskId }` | `status: 'done'`, `completedAt` set. **Rejects recurring tasks (400)** — the app itself has no wired-up path that marks a recurring task "done" (completion there is tracked via `lastCompletedDate`, which no UI currently writes); rather than invent behavior the app doesn't have, we reject with a clear error |
-| `drop_task` | `{ taskId }` | `status: 'dropped'` — works for recurring tasks too, since it's a plain field flip with no derived semantics. **Never a hard delete**, anywhere |
-| `add_project` | `{ title, category?, status?, trackerProjectId? }` | defaults: `category: 'personal'`, `status: 'backlog'`. `trackerProjectId` optionally links the new project to an 8-char Off Course Project Tracker project id |
+| `add_task` | `{ title, projectId?, taskType?, nextAction?, kanbanColumn?, addToToday?, addToTomorrow? }` | mirrors the store's task factory (uuid, `status: 'backlog'`, `isRecurring: false`, …); `addToToday`/`addToTomorrow` append to `shortTasks` (or `maintenanceTasks` if `taskType === 'maintenance'`) of `dailyPlan`/`tomorrowPlan` respectively. `addToTomorrow` creates a fresh tomorrow plan if none exists or it's stale. `addToToday` instead **refreshes** a stale `dailyPlan` first — see below — so it never silently clobbers yesterday's plan. If `projectId` is linked, best-effort mirrors a new subtask (see §4) |
+| `update_task` | `{ taskId, title?, projectId?, taskType?, nextAction?, kanbanColumn?, addToToday?, addToTomorrow? }` | `projectId: null` moves a project task to orphan; a string moves it to that project (404 if it doesn't exist). `addToToday`/`addToTomorrow` put this existing task onto today's/tomorrow's plan — a no-op if the task is already in either tier of that plan. Best-effort mirrors a title change and/or a move into/out of a linked project (see §4) |
+| `complete_task` | `{ taskId }` | `status: 'done'`, `completedAt` set. **Rejects recurring tasks (400)** — the app itself has no wired-up path that marks a recurring task "done" (completion there is tracked via `lastCompletedDate`, which no UI currently writes); rather than invent behavior the app doesn't have, we reject with a clear error. Best-effort pushes `done: true` to a linked subtask (see §4) |
+| `drop_task` | `{ taskId }` | `status: 'dropped'` — works for recurring tasks too, since it's a plain field flip with no derived semantics. **Never a hard delete**, anywhere. Best-effort removes a linked subtask (see §4) |
+| `add_project` | `{ title, category?, status?, trackerProjectId?, marketingCode?, marketingPeriod? }` | defaults: `category: 'personal'`, `status: 'backlog'`. `trackerProjectId` optionally links the new project to an 8-char Off Course Project Tracker project id. `marketingCode`/`marketingPeriod`: see §4 |
 | `rename_project` | `{ projectId, title?, trackerProjectId? }` | bumps `updatedAt`; at least one of `title`/`trackerProjectId` is required. `trackerProjectId: null` (or `""`) clears the link. Unchanged by this round of work |
-| `update_project` | `{ projectId, title?, status?, category?, trackerProjectId?, syncStatus? }` | broader than `rename_project`: status/category too, and an optional push to the tracker. At least one of `title`/`status`/`category`/`trackerProjectId` is required. Mirrors `moveProject`'s (`src/store/projectsSlice.ts`) only status-change side effect — `waitingOn` is cleared when the new status is `done`, preserved otherwise. The WIP-limit swap-modal gate `moveProject` enforces for `in_progress`/`waiting` is a client-only UX prompt with no sensible server resolution, so it's intentionally **not** enforced here. `syncStatus: true` additionally pushes the mapped status to the linked tracker project **after** the Vandaag write commits (see below) — never rolled back if that push fails |
+| `update_project` | `{ projectId, title?, status?, category?, trackerProjectId?, marketingCode?, marketingPeriod?, syncStatus? }` | broader than `rename_project`: status/category/marketing fields too, and an optional push to the tracker. At least one settable field is required. Mirrors `moveProject`'s (`src/store/projectsSlice.ts`) only status-change side effect — `waitingOn` is cleared when the new status is `done`, preserved otherwise. The WIP-limit swap-modal gate `moveProject` enforces for `in_progress`/`waiting` is a client-only UX prompt with no sensible server resolution, so it's intentionally **not** enforced here. `syncStatus: true` additionally pushes the mapped status to the linked tracker project **after** the Vandaag write commits (see below) — never rolled back if that push fails |
 | `list_tracker_projects` | `{ status?, includeCompleted? }` | **Read-only.** Returns `{ workspaceId, projects }` from the separate "Off Course — Project Tracker" app/Firebase project (see below) — `workspaceId` is included so the caller can see which workspace was actually read. `status` filters to one or a list of tracker statuses; `includeCompleted` defaults true |
 | `update_tracker_project` | `{ projectId, status?, title?, urgency? }` | **Tracker-only write** (`api/_lib/trackerOps.ts`). At least one of `status`/`title`/`urgency` is required. Writes only the tracker doc's `projects` field, inside a transaction — every other project and every other top-level field is untouched, and unknown fields on the target project are preserved. Returns `{ project, previousStatus }`. See "Status-transition timestamps" below |
-| `tracker_sync_report` | `{ includeDone? }` | **Read-only** (`api/_lib/trackerSync.ts`). Compares Vandaag projects against tracker projects; see "Cross-app sync" below |
+| `tracker_sync_report` | `{ includeDone? }` | **Read-only** (`api/_lib/trackerSync.ts`). Compares Vandaag projects against tracker projects; see "Cross-app sync" below. Now also includes a `tasks` section (§4) and opportunistically logs tracker-app drift (§4, change log) |
 | `sync_tracker_status` | `{ dryRun?, projectIds? }` | Pulls tracker status into linked Vandaag projects (never the reverse). `dryRun` defaults **true** (report only); pass `false` to apply. `projectIds` optionally limits to specific Vandaag project ids. See "Cross-app sync" below |
+| `sync_tracker_tasks` | `{ projectIds?, dryRun?, importUnlinked? }` | Two-way task↔subtask sync. `dryRun` defaults **true**. See §4 |
+| `list_changes` | `{ since?, side?, entity?, limit? }` | **Read-only.** Change log, newest first. See §4 |
+| `complete_deep_block` | `{ date?, category? }` | Marks a deep block done; records it durably. See §4 |
+| `deep_block_stats` | `{ weeks? }` | **Read-only.** Weekly counts, streaks. See §4 |
 
 All inputs are validated (types, enum membership from `src/types`, title length) → **400**; unknown ids → **404**.
 
@@ -195,3 +199,219 @@ This turns "merge the whole array" into "write the one doc that changed," which 
 - **Nothing in this PR migrates data.** This section is a proposal to discuss, not a plan already in motion.
 - It requires **Beer's explicit sign-off** before a single write happens.
 - It requires a **full Firestore export/backup** (`gcloud firestore export`) of the production project immediately before the backfill step, so step 5's rollback path is real and tested, not theoretical.
+
+## 4. Task sync, change log, deep-block counter, marketing fields
+
+### Why subcollections, not new fields on `users/{uid}`
+
+Every new piece of durable state added in this round — the change log, the tracker-drift
+snapshot, the deep-block log — lives in a **subcollection** (`users/{uid}/changes/*`,
+`users/{uid}/meta/trackerSnapshot`, `users/{uid}/deepBlockLog/*`), never as a new top-level
+field on the main `users/{uid}` doc. That's not a style preference: `useFirestoreSync`
+(`src/hooks/useFirestoreSync.ts`) saves the **entire** doc on every change, built from a
+client-known `SyncData` shape (`src/lib/firestore.ts`) and merged three-way in
+`src/lib/syncMerge.ts` — both of which enumerate a fixed set of top-level keys. A new field
+the client doesn't know about would be silently dropped the next time any open tab saves,
+which could be seconds after the agent wrote it. A subcollection is invisible to all of that
+machinery, so it's immune by construction. `marketingCode`/`marketingPeriod`, by contrast,
+*are* new fields — but on `Project`, which already round-trips through `SyncData` as an
+opaque object (`src/types/index.ts`'s `Project` interface, spread verbatim by the store), so
+a client that doesn't know about them just carries them along unchanged.
+
+No Firestore rules file exists in this repo (`rg -i 'firestore.rules'` turns up nothing) — the
+admin SDK bypasses rules entirely regardless, so **nothing here required a rules change**.
+If/when client-side rules are introduced, `changes`/`meta`/`deepBlockLog` subcollections
+should be added as agent/admin-only (no direct client read/write) since they're an
+audit/analytics trail, not user-editable state.
+
+### 4a. Two-way task↔subtask sync (`api/_lib/trackerTasks.ts`, `sync_tracker_tasks`)
+
+**Linking** is one-directional storage: a tracker subtask carries `vandaagTaskId` pointing at
+the Vandaag task it mirrors (`TrackerSubtask.vandaagTaskId` in `trackerOps.ts`, extended this
+round). Vandaag's own `Task` type is untouched. Matching is always `vandaagTaskId ===
+task.id`, never by title, so a sync can never duplicate a subtask.
+
+**Conflict resolution** reuses the tracker-drift snapshot kept for the change log
+(`users/{uid}/meta/trackerSnapshot`) instead of inventing a second "last-seen Vandaag"
+snapshot. A linked pair only needs resolving when its *current* title/done actually disagree
+— when they do:
+- only the tracker moved since the snapshot → tracker wins (pulled into Vandaag, including
+  un-completing it if the tracker went from done back to open);
+- only Vandaag moved → Vandaag wins (pushed to the subtask);
+- both moved, or there's no snapshot entry yet (first sync) → **title follows Vandaag**;
+  **done is sticky-true** (true wins over false — completion never gets un-synced back to
+  open by this branch; the tracker-only-un-complete case above still works for an explicit,
+  unambiguous tracker-side change).
+
+**Dropped tasks**: a dropped Vandaag task (`status: 'dropped'`, never a hard delete — same
+rule as everywhere else) removes its linked subtask. **Moved tasks**: a task moved to a
+*different linked* project removes the old subtask and creates a fresh one in the new
+project (not a "transfer" of the raw object — the two projects' subtask lists are otherwise
+independent, and a new subtask is simpler and no less correct; it carries the same
+`vandaagTaskId`, so matching is unaffected). **Unlinked subtasks** (no `vandaagTaskId`) are
+never written to, only reported (`unlinkedSubtasks`), unless `importUnlinked: true` creates a
+Vandaag task for each and stamps the link on afterward.
+
+**IO** (`runAgentAction.ts`, `sync_tracker_tasks`): the Vandaag-side write happens inside a
+Vandaag transaction (fresh read, recompute the plan, apply `vandaagPatch`); the tracker-side
+write happens inside its own transaction on the tracker's Firestore (fresh read, recompute
+the plan again using the just-decided Vandaag project state, write only `projects`) — the two
+can never be perfectly atomic across two separate Firebase projects, which is why every
+tracker write here is **minimal and idempotent**: a write that's lost to a race (e.g. an open
+tracker-app tab's debounced full-doc save landing moments later) is simply repaired by the
+*next* `sync_tracker_tasks` call, since the plan is always recomputed from current state, not
+from a diff against what we think we last wrote.
+
+`tracker_sync_report` embeds the same planner's output (dry-run, `importUnlinked: false`) as
+its `tasks` section (`pendingChanges`, `unlinkedSubtasks`) — a report never writes anything.
+
+**Best-effort per-task mirroring** (`add_task`/`update_task`/`complete_task`/`drop_task`):
+after the Vandaag write commits, if the task's project (old and/or new, for a move) is
+linked, a focused single-task push runs — create/push/move/remove, no conflict resolution
+(there's nothing to resolve: this *is* the change a future snapshot diff would need to
+reconcile against, not two sides that drifted independently). Unlike `update_project`'s
+`syncStatus`, which always wraps its result as `{ project, tracker? }`, a task result is
+**only** touched when a mirror was actually attempted (project linked and `trackerChanged`)
+— an unlinked task's result is the same flat `AgentTaskSummary` as before this feature
+existed, so this is purely additive for the common case. When attempted, the result gets a
+`tracker: {updated: true} | {skipped: string} | {error: string}` field, mirroring
+`update_project`'s own convention.
+
+### 4b. Change log (`api/_lib/changeLog.ts`, `list_changes`)
+
+`users/{uid}/changes/{autoId}`: `{ at, side: 'vandaag'|'tracker'|'agent', entity:
+'project'|'task'|'subtask'|'deepBlock', id, action, before?, after? }` — `before`/`after` only
+ever contain the fields that actually changed (`diffEntityFields`), never a full snapshot.
+
+Two logging paths:
+- **Every agent-API write** logs `side: 'agent'`, **inside the same transaction as the write
+  itself** — not wrapped in its own try/catch. If the log entry's own write somehow failed,
+  the whole transaction (including the write it would have described) rolls back together,
+  which is correct: a write and its log entry can never disagree about whether the other
+  happened. (Genuinely cross-system, best-effort pieces — the tracker-side push after
+  `update_project`'s `syncStatus`, the per-task tracker mirror, the tracker-drift diff below —
+  *are* wrapped and swallowed, since those run after the Vandaag write has already committed
+  and have nothing left to roll back into.)
+- **Tracker-app drift** (`side: 'tracker'`): on every `tracker_sync_report` /
+  `sync_tracker_status` / `sync_tracker_tasks` call, the tracker state as read at the *start*
+  of that call (before any writes *this* call is about to make) is diffed against the
+  last-seen snapshot (`diffTrackerSnapshot`); the diff is logged, then the *post-write* state
+  becomes the new snapshot baseline — so the agent's own imminent writes are never
+  mistaken for tracker-app drift on the next call. One-off agent tracker writes
+  (`update_tracker_project`, the per-task mirror) additionally patch just their own project's
+  entry in the snapshot immediately, for the same reason, without doing a full diff.
+
+**Retention**: entries older than 90 days, and the oldest entries beyond a 2000-entry cap, are
+opportunistically pruned (small bounded batch) after every write — best-effort, never blocks
+or fails the write it rides along with.
+
+`list_changes({ since?, side?, entity?, limit? = 50, max 500 })` returns newest-first.
+**Caveat**: combining `side`/`entity` equality filters with the `at` ordering/range is a
+composite Firestore query — production may need a composite index created the first time
+that combination runs (a single-field index, which Firestore creates automatically, is not
+enough). This is a deploy-time concern, not a code one.
+
+### 4c. Deep-block counter (`api/_lib/deepBlock.ts`, `complete_deep_block`, `deep_block_stats`)
+
+**Where the data comes from**: investigated `completeDeepBlock` (`src/store/helpers.ts`) and
+`planHistory` (`src/store/plansSlice.ts`, `dailyPlanRollover.ts`). `planHistory` *does*
+archive a full `DailyPlan` — including `deepBlock.completedProjectTitle`/`completedAt` — on
+rollover, but **not** a durable category: `completeDeepBlock` clears `deepBlock.projectId` to
+`''` the moment it completes, so by the time a plan is archived there's no project id left to
+look up a category from, only a title. `planHistory` is also unbounded (no cap/pruning found)
+on an already single-document-limited doc. For these two reasons, a **separate durable
+record** was added — `users/{uid}/deepBlockLog/{date}` (a subcollection, see above) — rather
+than relying on `planHistory` alone.
+
+`deep_block_stats` still **derives from the existing data wherever it can**, instead of only
+trusting `deepBlockLog`: `deriveDeepBlockEntriesFromHistory` (`deepBlock.ts`, pure) builds an
+entry for every `planHistory[date]` and the live `dailyPlan` whose `deepBlock.completedAt` is
+set, deriving its category by matching `completedProjectTitle` (normalized — trimmed,
+case-insensitive) against current Vandaag projects' titles (`projectId` is checked first, for
+robustness, though nothing currently leaves it set post-completion); unmatched or untitled
+entries fall back to `'other'`. `mergeDeepBlockEntries` then unions these with the explicit
+`deepBlockLog`, **deduped by date — the explicit log wins** whenever both cover the same date,
+since it carries an agent-supplied category rather than a derived guess. The client's own
+`completeDeepBlock` was deliberately **not** changed to additionally write `deepBlockLog`
+itself: doing so would mean touching `src/store/plansSlice.ts`, `src/lib/syncMerge.ts` (to
+decide how a *client* write to a new subcollection doc fits the merge model), and the sync
+type contracts, for a feature the user only asked to expose through the agent API — and the
+history-derivation above already recovers most of the value of doing so (modulo the title-
+matching caveat below). **Follow-up, if exact category tracking for client-only completions
+matters**: have the client call the agent API's `complete_deep_block` (or a new thin
+client-side write to the same subcollection) when it completes a deep block.
+
+`complete_deep_block({ date?, category? })`: `date` defaults to today (Europe/Amsterdam).
+For today, mirrors the client's `completeDeepBlock` exactly (clears `deepBlock.projectId`,
+stamps `completedProjectTitle`/`completedAt`), rolling over a stale `dailyPlan` first (same
+rollover `addToToday` uses) so this can be called at any time of day. **Idempotent per
+date**: the log doc is keyed by `date` (a `set`, not an `add`), so calling it twice for the
+same date just re-confirms the same entry; completing an already-completed today is a no-op
+on `dailyPlan` (nothing left to clear) but still writes the log entry. For a non-today date,
+nothing in `dailyPlan` is touched (there's no live plan for an arbitrary past day to safely
+mutate) — `category` must be supplied explicitly, since there's no active project to derive
+it from. **Category mapping**: `category` param wins; otherwise derived from the active deep
+block's project category via `marketing → 'marketing'`, **everything else → `'other'`**. The
+live app (`CATEGORY_CONFIG`, `src/types/index.ts`) has `marketing/ops/admin/finance/
+product/personal` and no "sales" category or signal anywhere (checked the tracker's live
+bundle too — its only status-adjacent enum is an unrelated `domainStatus` for "domain" kind
+entries) — so there's nothing to map a dedicated "sales" bucket from.
+
+`deep_block_stats({ weeks? = 8 })`: buckets the merged entries into the trailing `weeks` **distinct
+ISO weeks** (Monday-start, Thursday decides the ISO week-year — the standard anchors on
+January 4th, not January 1st, which matters whenever Jan 1 falls on Fri/Sat/Sun) ending with
+the week containing today, per-category totals, plus `currentStreak`/`longestStreak`.
+**Weekend rule**: streaks count **consecutive workdays (Mon–Fri)** with at least one
+completion; a weekend is transparent to the streak (neither breaks nor extends it), but a
+weekend completion still counts toward that week's total. `currentStreak` gives *today* a
+grace day — an undone workday that isn't over yet doesn't break the streak — but any
+*earlier* missed workday does; `longestStreak` is the max of the longest fully-elapsed run
+and the (graced) current streak.
+
+### 4d. Marketing fields on `Project`
+
+`marketingCode?: string` (trimmed, 1–200 chars; `null`/`""` clears) and `marketingPeriod?: {
+from?: 'YYYY-MM-DD', to?: 'YYYY-MM-DD' }` (both optional, validated date strings, `from <=
+to` when both set; `null`, or an object with neither `from` nor `to`, clears it) — added to
+`Project` (`src/types/index.ts`), settable via `add_project`/`update_project`, returned from
+`list_projects`/project summaries whenever set. Purely additive: existing clients that don't
+know these fields just carry them through unchanged (see "why subcollections" above).
+
+**Verified this survives the client's whole-doc save and merge** (not just asserted): traced
+the full path and backed it with tests (`src/lib/syncMerge.test.ts`, "marketingCode/
+marketingPeriod survive" block).
+- `extractSyncData()` (`useFirestoreSync.ts`) passes `state.projects` straight through —
+  it never reconstructs a `Project` field-by-field, so any field present on the in-memory
+  object (known to the `Project` type or not) rides along.
+- `mergeObjectFields`/`mergeProjectEntity` (`syncMerge.ts`) merge a project's fields by
+  whatever keys are actually present on the two sides (`new Set([...Object.keys(local),
+  ...Object.keys(remote)])`) — there's no fixed field whitelist, so `marketingCode`/
+  `marketingPeriod` get the same only-one-side-changed/local-wins-on-conflict treatment as
+  every other scalar field, with no code change needed to support them.
+- `deepClean()` (`utils.ts`, a `JSON.stringify` roundtrip turning `undefined` into `null`)
+  preserves every key before the final `tx.set`, so a cleared field survives as `null`
+  rather than vanishing.
+
+### Risks
+
+- **Cross-Firestore atomicity**: `sync_tracker_tasks` and the per-task mirror write Vandaag
+  and the tracker in two separate transactions on two separate Firebase projects — a failure
+  between them leaves one side applied and the other not. Mitigated by designing every
+  tracker write to be idempotent and self-healing on the next sync, but not eliminated.
+- **`list_changes` deliberately avoids a composite index**: it orders/ranges only on `at`
+  (single-field, auto-indexed) and applies `side`/`entity` as an in-memory filter over
+  `at`-ordered pages (cursor-paginated via `startAfter`, capped at `CHANGE_MAX_ENTRIES`
+  scanned documents) — so it can't hit `FAILED_PRECONDITION` in production, at the cost of a
+  rare worst case (a narrow filter matching almost nothing) scanning up to that cap instead
+  of using an index to jump straight to the matches.
+- **Deep-block category for client-only completions is a best-effort title match**, not an
+  exact one: `deep_block_stats` derives entries for dates with no explicit `deepBlockLog`
+  write from `planHistory`/`dailyPlan`, matching `completedProjectTitle` against *current*
+  project titles — a project renamed or (hypothetically) removed since that completion will
+  fall back to `'other'` rather than its real category. The explicit `deepBlockLog` (written
+  by `complete_deep_block`) doesn't have this problem, since it records the category at
+  completion time.
+- **`planHistory` is still unbounded** (pre-existing, not introduced by this round) — flagged
+  here because `deep_block_stats`'s history-derivation path depends on it, which makes its
+  own output only as complete as however much of `planHistory` the user doc still has room
+  for, but the underlying doc-size risk for `users/{uid}` remains open regardless.

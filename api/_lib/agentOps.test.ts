@@ -444,6 +444,46 @@ describe('addProject', () => {
     const { result } = addProject(baseData(), { title: 'x' })
     expect(result.trackerProjectId).toBeUndefined()
   })
+
+  it('sets marketingCode and marketingPeriod when given', () => {
+    const { result } = addProject(baseData(), {
+      title: 'x',
+      marketingCode: ' SPRING26 ',
+      marketingPeriod: { from: '2026-03-01', to: '2026-03-31' },
+    })
+    expect(result.marketingCode).toBe('SPRING26')
+    expect(result.marketingPeriod).toEqual({ from: '2026-03-01', to: '2026-03-31' })
+  })
+
+  it('omits marketingCode/marketingPeriod when not given', () => {
+    const { result } = addProject(baseData(), { title: 'x' })
+    expect(result.marketingCode).toBeUndefined()
+    expect(result.marketingPeriod).toBeUndefined()
+  })
+
+  it('rejects an empty-string marketingCode on add (treated as clear -> nothing to set)', () => {
+    const { result } = addProject(baseData(), { title: 'x', marketingCode: '' })
+    expect(result.marketingCode).toBeUndefined()
+  })
+
+  it('rejects a marketingCode over the max length', () => {
+    expect(() => addProject(baseData(), { title: 'x', marketingCode: 'a'.repeat(201) })).toThrow(AgentOpError)
+  })
+
+  it('rejects marketingPeriod with from after to', () => {
+    expect(() =>
+      addProject(baseData(), { title: 'x', marketingPeriod: { from: '2026-04-01', to: '2026-03-01' } }),
+    ).toThrow(AgentOpError)
+  })
+
+  it('rejects a malformed marketingPeriod date', () => {
+    expect(() => addProject(baseData(), { title: 'x', marketingPeriod: { from: '03-01-2026' } })).toThrow(AgentOpError)
+  })
+
+  it('treats an empty marketingPeriod object as unset', () => {
+    const { result } = addProject(baseData(), { title: 'x', marketingPeriod: {} })
+    expect(result.marketingPeriod).toBeUndefined()
+  })
 })
 
 describe('renameProject', () => {
@@ -542,6 +582,42 @@ describe('updateProject', () => {
     })
     const { patch } = updateProject(data, { projectId: 'p1', status: 'in_progress' })
     expect(patch.projects!.find(p => p.id === 'p2')).toEqual(data.projects[1])
+  })
+
+  it('sets and clears marketingCode', () => {
+    const data = baseData({ projects: [project({ id: 'p1' })] })
+    const { result: set } = updateProject(data, { projectId: 'p1', marketingCode: 'SUMMER26' })
+    expect(set.marketingCode).toBe('SUMMER26')
+
+    const data2 = baseData({ projects: [project({ id: 'p1', marketingCode: 'SUMMER26' })] })
+    const { result: cleared } = updateProject(data2, { projectId: 'p1', marketingCode: null })
+    expect(cleared.marketingCode).toBeUndefined()
+  })
+
+  it('sets and clears marketingPeriod', () => {
+    const data = baseData({ projects: [project({ id: 'p1' })] })
+    const { result: set } = updateProject(data, { projectId: 'p1', marketingPeriod: { from: '2026-05-01' } })
+    expect(set.marketingPeriod).toEqual({ from: '2026-05-01' })
+
+    const data2 = baseData({ projects: [project({ id: 'p1', marketingPeriod: { from: '2026-05-01' } })] })
+    const { result: cleared } = updateProject(data2, { projectId: 'p1', marketingPeriod: null })
+    expect(cleared.marketingPeriod).toBeUndefined()
+  })
+
+  it('rejects marketingPeriod with from after to on update', () => {
+    const data = baseData({ projects: [project({ id: 'p1' })] })
+    expect(() =>
+      updateProject(data, { projectId: 'p1', marketingPeriod: { from: '2026-04-01', to: '2026-03-01' } }),
+    ).toThrow(AgentOpError)
+  })
+
+  it('preserves existing marketingCode/marketingPeriod when updating unrelated fields', () => {
+    const data = baseData({
+      projects: [project({ id: 'p1', marketingCode: 'KEEP', marketingPeriod: { from: '2026-01-01' } })],
+    })
+    const { result } = updateProject(data, { projectId: 'p1', status: 'in_progress' })
+    expect(result.marketingCode).toBe('KEEP')
+    expect(result.marketingPeriod).toEqual({ from: '2026-01-01' })
   })
 })
 

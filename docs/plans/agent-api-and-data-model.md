@@ -31,12 +31,16 @@ Target uid: `AGENT_UID` if set, else `WRITE_AWAY_UID` (so a single uid env var c
 | `complete_task` | `{ taskId }` | `status: 'done'`, `completedAt` set. **Rejects recurring tasks (400)** — the app itself has no wired-up path that marks a recurring task "done" (completion there is tracked via `lastCompletedDate`, which no UI currently writes); rather than invent behavior the app doesn't have, we reject with a clear error |
 | `drop_task` | `{ taskId }` | `status: 'dropped'` — works for recurring tasks too, since it's a plain field flip with no derived semantics. **Never a hard delete**, anywhere |
 | `add_project` | `{ title, category?, status?, trackerProjectId? }` | defaults: `category: 'personal'`, `status: 'backlog'`. `trackerProjectId` optionally links the new project to an 8-char Off Course Project Tracker project id |
-| `rename_project` | `{ projectId, title?, trackerProjectId? }` | bumps `updatedAt`; at least one of `title`/`trackerProjectId` is required. `trackerProjectId: null` (or `""`) clears the link |
+| `rename_project` | `{ projectId, title?, trackerProjectId? }` | bumps `updatedAt`; at least one of `title`/`trackerProjectId` is required. `trackerProjectId: null` (or `""`) clears the link. Unchanged by this round of work |
+| `update_project` | `{ projectId, title?, status?, category?, trackerProjectId?, syncStatus? }` | broader than `rename_project`: status/category too, and an optional push to the tracker. At least one of `title`/`status`/`category`/`trackerProjectId` is required. Mirrors `moveProject`'s (`src/store/projectsSlice.ts`) only status-change side effect — `waitingOn` is cleared when the new status is `done`, preserved otherwise. The WIP-limit swap-modal gate `moveProject` enforces for `in_progress`/`waiting` is a client-only UX prompt with no sensible server resolution, so it's intentionally **not** enforced here. `syncStatus: true` additionally pushes the mapped status to the linked tracker project **after** the Vandaag write commits (see below) — never rolled back if that push fails |
 | `list_tracker_projects` | `{ status?, includeCompleted? }` | **Read-only.** Returns `{ workspaceId, projects }` from the separate "Off Course — Project Tracker" app/Firebase project (see below) — `workspaceId` is included so the caller can see which workspace was actually read. `status` filters to one or a list of tracker statuses; `includeCompleted` defaults true |
+| `update_tracker_project` | `{ projectId, status?, title?, urgency? }` | **Tracker-only write** (`api/_lib/trackerOps.ts`). At least one of `status`/`title`/`urgency` is required. Writes only the tracker doc's `projects` field, inside a transaction — every other project and every other top-level field is untouched, and unknown fields on the target project are preserved. Returns `{ project, previousStatus }`. See "Status-transition timestamps" below |
+| `tracker_sync_report` | `{ includeDone? }` | **Read-only** (`api/_lib/trackerSync.ts`). Compares Vandaag projects against tracker projects; see "Cross-app sync" below |
+| `sync_tracker_status` | `{ dryRun?, projectIds? }` | Pulls tracker status into linked Vandaag projects (never the reverse). `dryRun` defaults **true** (report only); pass `false` to apply. `projectIds` optionally limits to specific Vandaag project ids. See "Cross-app sync" below |
 
 All inputs are validated (types, enum membership from `src/types`, title length) → **400**; unknown ids → **404**.
 
-### Tracker integration (`list_tracker_projects`, `api/_lib/trackerOps.ts`)
+### Tracker integration (`list_tracker_projects`, `update_tracker_project`, `api/_lib/trackerOps.ts`)
 
 Read-only bridge into the "Off Course — Project Tracker" app's Firestore doc at `workspaces/{workspaceId}/tracker/state` (fields: `dna`, `people`, `edges`, `goals`, `frames`, `projects`). Each tracker project is normalized defensively (missing fields, `subtasks` as strings or `{title, done}` objects) and returned with `assignees` resolved from `assigneeIds` via `people`, plus `goal`/`frame` when a project's `goalId`/`frameId` resolves to one.
 
@@ -48,6 +52,54 @@ Config (`api/_lib/firebaseAdmin.ts`):
 - Being unconfigured only affects this one tool — it returns a generic error (never echoing env values) rather than tripping `getAgentConfigError()`'s 503 gate for the whole agent API/MCP endpoint.
 - `getAdminApp()` resolves the app named `'[DEFAULT]'` specifically (not just `getApps()[0]`), so creating the named tracker app first doesn't get mistaken for Vandaag's own app.
 - **Secret safety:** every Firestore read in `trackerOps.ts` goes through a wrapper (`getTrackerDbSafe`) that catches *any* failure from acquiring the tracker's admin app/db — including a malformed `TRACKER_FIREBASE_SERVICE_ACCOUNT` failing `JSON.parse` with a snippet of the secret in its own error message — and rethrows the same generic `AgentOpError(503, 'Tracker is not configured')` with no logging of the original error, so a bad secret can never leak into a response or a log line.
+
+#### `update_tracker_project`: status-transition timestamps
+
+The tracker app's own zustand store actions (`useAppStore.js` in its live bundle) are the source of truth for how `status`, `startedAt`, and `completedAt` move together:
+
+```
+startProject:    status -> in_progress, startedAt = existing ?? now
+pauseProject:    status -> paused                       (no timestamp change)
+resumeProject:   status -> in_progress                   (no timestamp change — startedAt is already set by then)
+completeProject: status -> completed, completedAt = now
+```
+
+`update_tracker_project` mirrors this by resulting status rather than by observed transition (so e.g. passing `status: 'in_progress'` behaves the same whether the project was `not_started` or `paused` before, exactly like the two different buttons `startProject`/`resumeProject` do in the UI):
+
+- `-> in_progress`: `startedAt = existing ?? now` (never clobbers an already-set `startedAt`).
+- `-> completed`: `completedAt = now`, unconditionally.
+- `-> paused`: no timestamp side effects.
+- **Leaving `completed` for any other status: `completedAt` is cleared.** This one is *not* observed anywhere in the live bundle — there's no "uncomplete" action to mirror — so it's our own choice, made to avoid a stale completion timestamp surviving on a project that's active again. `startedAt` is never cleared by any transition (including back to `not_started`), since nothing in the app does that either.
+
+**`urgency`:** the live bundle (`index.js`/`useAppStore.js`) has no `urgency` field anywhere in its project shape, store actions, or UI strings — the only status-adjacent enum found is an unrelated `domainStatus` (`rustig`/`actief`/`urgent`) used only by "domain" kind entries, not regular projects. Since there's no enum to validate against, `urgency` is accepted as either a string or a number and passed through as-is, undocumented by the app itself.
+
+### Cross-app sync (`tracker_sync_report`, `sync_tracker_status`, `api/_lib/trackerSync.ts`)
+
+Status mapping, used by both tools:
+
+| Tracker | Vandaag |
+|---|---|
+| `not_started` | `backlog` |
+| `in_progress` | `in_progress` |
+| `paused` | `waiting` |
+| `completed` | `done` |
+
+`trackerSync.ts` has zero Firestore/HTTP imports — both tools' core logic (`buildTrackerSyncReport`, `computeTrackerStatusChanges`) are pure functions over plain `Project[]`/`TrackerProjectSummary[]` arrays; the IO (reading both apps' data, and for `sync_tracker_status`, writing Vandaag) lives in `runAgentAction.ts`.
+
+**`tracker_sync_report`** (read-only) reports, for every Vandaag project linked via `trackerProjectId`:
+- **(a) status mismatches** — the linked pair's statuses don't agree under the mapping above; includes both sides' current status and what each would need to be to agree.
+- **(b) broken links** — `trackerProjectId` points at a tracker project id that no longer exists.
+- **(c) unlinked-Vandaag suggestions** — for each unlinked Vandaag project, candidate tracker projects ranked by normalized-title similarity (lowercased, diacritics/punctuation stripped, whitespace collapsed; score 1 for an exact match, 0.95 for containment, else the better of token-Jaccard and a Levenshtein ratio — included at `>= 0.8`). Restricted to tracker projects **not already linked** from any Vandaag project, since a tracker project someone else already points to isn't a useful suggestion even with a perfect title match.
+- **(d) unlinked tracker projects** — the same "not linked from anywhere" set from (c), listed on its own.
+- **(e) duplicates** — two-or-more Vandaag projects linked to the same tracker id, plus near-identical-title pairs (same threshold as (c)) within each app separately.
+
+`includeDone` (default `false`) only narrows (c)/(d) — a done Vandaag project or a completed tracker project isn't a useful "needs linking" suggestion by default. **(a) and (e) always consider every project regardless of status** — a status mismatch or a duplicate link is a correctness issue worth surfacing even on finished work, not something to hide behind a flag.
+
+**`sync_tracker_status`** (write, Vandaag-only) is the one-directional pull: tracker status -> Vandaag status, for every linked project whose mapped status actually differs (a broken link is silently skipped here — that's `tracker_sync_report`'s job to surface). `dryRun` defaults to **true**; the tracker is always read first, then the (would-be) changes are computed inside the same Vandaag transaction used everywhere else, applying them — including the `moveProject` `waitingOn`-clear-on-`done` mirror — only when `dryRun: false`. It never writes to the tracker.
+
+### `update_project` + tracker sync (`runAgentAction.ts`)
+
+`update_project`'s `syncStatus: true` option composes the two integrations above for the single-project case: after the normal Vandaag transaction commits, if the project is linked and its status actually changed, `attachTrackerSync()` calls `update_tracker_project` with the mapped status and folds the outcome into the result as `tracker: { updated: true, previousStatus, status } | { skipped: reason } | { error: generic message }`. The Vandaag write is never rolled back if this second call fails or the project isn't linked/status didn't change — those are reported, not treated as part of the same unit of work.
 
 ### Write path
 
